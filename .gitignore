@@ -1,0 +1,16 @@
+# dependencies
+node_modules/
+
+# secrets / env
+.env
+.env.local
+.env.*.local
+
+# build output
+dist/
+
+# macOS
+.DS_Store
+
+# local editor/tool settings
+.claude/settings.local.json

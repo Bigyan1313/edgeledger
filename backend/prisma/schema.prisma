@@ -1,0 +1,41 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  passwordHash String?              // optional: Google-only users have no password
+  googleId     String?  @unique     // Google's stable user id (the "sub" claim)
+  displayName  String?
+  createdAt    DateTime @default(now())
+  trades       Trade[]
+}
+
+model Trade {
+  id                Int      @id @default(autoincrement())
+  userId            Int
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date              DateTime
+  pair              String
+  direction         String
+  setup             String
+  entryPrice        Float?
+  stopLoss          Float?
+  takeProfit        Float?
+  exitPrice         Float?
+  lotSize           Float?
+  riskDollars       Float?
+  pnl               Float
+  outcome           String
+  emotionBefore     String?
+  followedChecklist Boolean  @default(false)
+  fullPort          Boolean  @default(false)
+  notes             String?
+  createdAt         DateTime @default(now())
+}

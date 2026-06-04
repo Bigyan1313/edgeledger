@@ -29,8 +29,10 @@ export async function request(path, options = {}) {
     ...options,
   })
 
-  // Token missing/expired/invalid anywhere → force a logout app-wide.
-  if (res.status === 401) {
+  // Only treat a 401 as an EXPIRED SESSION if we actually sent a token.
+  // A 401 with no token = a failed login/signup → let the real error message
+  // (e.g. "Invalid email or password") surface below instead.
+  if (res.status === 401 && token) {
     clearAuth()
     window.dispatchEvent(new Event('auth:logout'))
     throw new Error('Session expired. Please log in again.')

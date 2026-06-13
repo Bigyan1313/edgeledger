@@ -1,9 +1,23 @@
 @import "tailwindcss";
 
+/* EdgeLedger dark palette — referenced as bg-ink, bg-surface, border-line, text-muted, etc. */
+@theme {
+  --color-ink: #0b0e14;        /* page background */
+  --color-surface: #141a23;    /* card background */
+  --color-surface-2: #11161f;  /* nested/inner surface */
+  --color-line: #1e2733;       /* card borders */
+  --color-line-soft: #161d27;  /* subtle dividers */
+  --color-muted: #7e8796;      /* muted labels */
+  --color-faint: #aeb6c4;      /* secondary text */
+}
+
 body {
   margin: 0;
-  background: #0f1117;
-  color: #e5e7eb;
+  background: #0b0e14;
+  color: #e6e9ef;
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }

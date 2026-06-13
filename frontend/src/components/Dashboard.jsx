@@ -39,12 +39,12 @@ function computeStats(trades) {
            wins: wins.length, losses: losses.length }
 }
 
-function Stat({ label, value, sub, color = 'text-white' }) {
+function Stat({ label, value, sub, color = 'text-gray-100' }) {
   return (
-    <div className="bg-gray-800/60 border border-gray-700/50 rounded-xl p-4">
-      <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{label}</div>
-      <div className={`text-2xl font-bold ${color}`}>{value}</div>
-      {sub && <div className="text-xs text-gray-500 mt-1">{sub}</div>}
+    <div className="bg-surface border border-line rounded-xl px-3.5 py-3">
+      <div className="text-[11px] text-muted">{label}</div>
+      <div className={`text-xl font-semibold mt-1 ${color}`}>{value}</div>
+      {sub && <div className="text-[11px] text-muted mt-0.5">{sub}</div>}
     </div>
   )
 }
@@ -65,11 +65,9 @@ export default function Dashboard({ trades }) {
   const fmtDollar = n => `${n >= 0 ? '+' : ''}$${Math.abs(n).toFixed(2)}`
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-white">Dashboard</h2>
-
+    <div className="space-y-4">
       {/* Key stats grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         <Stat label="Net P&L"       value={fmtDollar(s.netPnl)}          color={pnlColor} />
         <Stat label="Win Rate"      value={`${(s.winRate * 100).toFixed(1)}%`}
                                     sub={`${s.wins}W / ${s.losses}L`} />
@@ -79,7 +77,7 @@ export default function Dashboard({ trades }) {
                                     color={s.expectancy >= 0 ? 'text-emerald-400' : 'text-red-400'} />
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         <Stat label="Avg R"         value={s.avgR != null ? `${fmt(s.avgR)}R` : '—'} />
         <Stat label="Avg Win"       value={`$${fmt(s.avgWin)}`}   color="text-emerald-400" />
         <Stat label="Avg Loss"      value={`$${fmt(s.avgLoss)}`}  color="text-red-400" />
@@ -106,8 +104,8 @@ export default function Dashboard({ trades }) {
       )}
 
       {/* Equity curve (simple) */}
-      <div className="bg-gray-800/60 border border-gray-700/50 rounded-xl p-4">
-        <div className="text-xs text-gray-500 uppercase tracking-wider mb-3">Equity Curve</div>
+      <div className="bg-surface border border-line rounded-xl p-4">
+        <div className="text-[11px] text-muted mb-3">Equity Curve</div>
         <EquityCurve points={s.equity} />
       </div>
 
@@ -138,8 +136,8 @@ function DisciplineMirror({ trades }) {
   const notCalm = splitStats(trades.filter(t => t.emotionBefore && t.emotionBefore !== 'Calm'))
 
   return (
-    <div className="bg-gray-800/60 border border-gray-700/50 rounded-xl p-4 space-y-4">
-      <div className="text-xs text-gray-500 uppercase tracking-wider">Discipline Mirror</div>
+    <div className="bg-surface border border-line rounded-xl p-4 space-y-4">
+      <div className="text-[11px] text-muted">Discipline Mirror</div>
       <div className="grid sm:grid-cols-2 gap-4">
         <MirrorPair
           title="Checklist"
@@ -169,11 +167,11 @@ function MirrorPair({ title, good, bad }) {
     </div>
   )
   return (
-    <div className="bg-gray-900/40 rounded-lg p-3">
-      <div className="text-xs font-medium text-gray-400 mb-2">{title}</div>
+    <div className="bg-surface-2 rounded-lg p-3">
+      <div className="text-xs font-medium text-faint mb-2">{title}</div>
       <div className="flex gap-3">
         <Side data={good} tone="good" />
-        <div className="w-px bg-gray-700/50" />
+        <div className="w-px bg-line" />
         <Side data={bad} tone="bad" />
       </div>
     </div>
@@ -222,8 +220,8 @@ function SetupTable({ trades }) {
   const rows = Object.entries(bySetup).sort((a, b) => b[1].pnl - a[1].pnl)
 
   return (
-    <div className="bg-gray-800/60 border border-gray-700/50 rounded-xl p-4">
-      <div className="text-xs text-gray-500 uppercase tracking-wider mb-3">Performance by Setup</div>
+    <div className="bg-surface border border-line rounded-xl p-4">
+      <div className="text-[11px] text-muted mb-3">Performance by Setup</div>
       <table className="w-full text-sm table-fixed">
         <colgroup>
           <col className="w-auto" />
@@ -239,7 +237,7 @@ function SetupTable({ trades }) {
             <th className="pb-2 text-right">Net P&L</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-700/30">
+        <tbody className="divide-y divide-line-soft">
           {rows.map(([setup, s]) => (
             <tr key={setup} className={DANGER.has(setup) ? 'text-red-400' : 'text-gray-300'}>
               <td className="py-2 text-xs pr-2">{DANGER.has(setup) && '⚠ '}{setup}</td>

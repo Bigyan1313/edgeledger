@@ -7,6 +7,7 @@ import TradeTable from './components/TradeTable.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import Calculators from './components/Calculators.jsx'
 import AuthScreen from './components/AuthScreen.jsx'
+import WakingScreen from './components/WakingScreen.jsx'
 import { downloadCsv } from './utils/csv.js'
 
 export default function App() {
@@ -30,6 +31,9 @@ export default function App() {
 
   // Not logged in → show the auth screen, nothing else.
   if (!user) return <AuthScreen />
+
+  // First data load (can be a ~30-60s Render cold start) → balloon ride.
+  if (loading) return <WakingScreen />
 
   // Called by TradeForm when a NEW trade is saved
   const handleCreated = (trade) => {
@@ -71,17 +75,13 @@ export default function App() {
       <Nav active={tab} onChange={handleNavChange} user={user} onLogout={logout} />
 
       <main className="max-w-5xl mx-auto px-6 py-8">
-        {loading && (
-          <div className="text-center py-16 text-gray-600">Loading…</div>
-        )}
-
         {error && (
           <div className="bg-red-950 border border-red-700 rounded-lg px-4 py-3 text-red-300 text-sm">
             {error}
           </div>
         )}
 
-        {!loading && !error && (
+        {!error && (
           <>
             {tab === 'dashboard' && <Dashboard trades={trades} />}
             {tab === 'log'       && (

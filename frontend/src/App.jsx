@@ -71,7 +71,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100">
+    <div className="min-h-screen bg-ink text-gray-100">
       <Nav active={tab} onChange={handleNavChange} user={user} onLogout={logout} />
 
       <main className="max-w-5xl mx-auto px-6 py-8">

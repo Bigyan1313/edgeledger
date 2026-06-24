@@ -8,19 +8,34 @@ datasource db {
 }
 
 model User {
-  id           Int      @id @default(autoincrement())
-  email        String   @unique
+  id           Int       @id @default(autoincrement())
+  email        String    @unique
   passwordHash String?              // optional: Google-only users have no password
-  googleId     String?  @unique     // Google's stable user id (the "sub" claim)
+  googleId     String?   @unique    // Google's stable user id (the "sub" claim)
   displayName  String?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
   trades       Trade[]
+  accounts     Account[]
+}
+
+model Account {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  mode            String   // "Live" | "Demo"
+  propFirm        String?  // for Demo accounts: prop firm name (null = plain practice / N/A)
+  startingBalance Float?
+  createdAt       DateTime @default(now())
+  trades          Trade[]
 }
 
 model Trade {
   id                Int      @id @default(autoincrement())
   userId            Int
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId         Int?
+  account           Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
   date              DateTime
   pair              String
   direction         String

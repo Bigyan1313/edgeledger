@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { tradesApi } from '../api/trades.js'
+import AccountSelector from './AccountSelector.jsx'
 
 // datetime-local inputs need "YYYY-MM-DDTHH:mm" in LOCAL time, not ISO/UTC.
 function isoToLocalInput(iso) {
@@ -11,6 +12,7 @@ function isoToLocalInput(iso) {
 // Turn a saved trade (numbers, ISO date) into form state (strings, local date).
 function tradeToForm(t) {
   return {
+    accountId:         t.accountId ?? null,
     date:              isoToLocalInput(t.date),
     pair:              t.pair,
     direction:         t.direction,
@@ -52,6 +54,7 @@ const DANGER_SETUPS = new Set([
 const PAIRS = ['XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY', 'GBPJPY', 'AUDUSD', 'USDCAD', 'Other']
 
 const EMPTY = {
+  accountId: null,
   date: '',
   pair: 'XAUUSD',
   direction: 'long',
@@ -95,7 +98,7 @@ function realizedR(form) {
   return null
 }
 
-export default function TradeForm({ editTrade, onCreated, onUpdated, onCancelEdit }) {
+export default function TradeForm({ editTrade, accounts = [], onAddAccount, onCreated, onUpdated, onCancelEdit }) {
   const isEditing = Boolean(editTrade)
   const [form, setForm] = useState(editTrade ? tradeToForm(editTrade) : EMPTY)
   const [saving, setSaving] = useState(false)
@@ -131,6 +134,7 @@ export default function TradeForm({ editTrade, onCreated, onUpdated, onCancelEdi
         lotSize:     form.lotSize     ? parseFloat(form.lotSize)     : null,
         riskDollars: form.riskDollars ? parseFloat(form.riskDollars) : null,
         pnl:         parseFloat(form.pnl),
+        accountId:   form.accountId ?? null,
       }
       if (isEditing) {
         const updated = await tradesApi.update(editTrade.id, payload)
@@ -153,19 +157,27 @@ export default function TradeForm({ editTrade, onCreated, onUpdated, onCancelEdi
 
   return (
     <form onSubmit={handleSubmit} className="max-w-2xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h2 className="text-xl font-semibold text-white">
           {isEditing ? `Edit Trade #${editTrade.id}` : 'Log Trade'}
         </h2>
-        {isEditing && (
-          <button
-            type="button"
-            onClick={onCancelEdit}
-            className="text-sm text-gray-400 hover:text-white transition-colors"
-          >
-            Cancel
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          <AccountSelector
+            accounts={accounts}
+            value={form.accountId}
+            onChange={(id) => set('accountId', id)}
+            onAdd={onAddAccount}
+          />
+          {isEditing && (
+            <button
+              type="button"
+              onClick={onCancelEdit}
+              className="text-sm text-gray-400 hover:text-white transition-colors"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
       </div>
 
       {isEditing && (

@@ -5,6 +5,16 @@ const router = Router()
 
 // Every route below assumes requireAuth has already run and set req.userId.
 
+// Guard: if a trade references an account, it must be one THIS user owns.
+// (null/undefined account is allowed — trades can be untagged.)
+async function accountAllowed(accountId, userId) {
+  if (accountId == null) return true
+  const acct = await prisma.account.findFirst({
+    where: { id: Number(accountId), userId },
+  })
+  return Boolean(acct)
+}
+
 // GET /api/trades — list THIS user's trades, newest first
 router.get('/', async (req, res) => {
   const trades = await prisma.trade.findMany({
@@ -18,6 +28,9 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   // Strip any userId the client might try to send; we set it from the token.
   const { userId, id, ...data } = req.body
+  if (!(await accountAllowed(data.accountId, req.userId))) {
+    return res.status(400).json({ error: 'Invalid account' })
+  }
   const trade = await prisma.trade.create({
     data: { ...data, userId: req.userId },
   })
@@ -36,6 +49,9 @@ router.get('/:id', async (req, res) => {
 // PUT /api/trades/:id — update only if owned by this user
 router.put('/:id', async (req, res) => {
   const { userId, id, ...data } = req.body
+  if (!(await accountAllowed(data.accountId, req.userId))) {
+    return res.status(400).json({ error: 'Invalid account' })
+  }
   // updateMany returns a count; it won't touch rows owned by someone else.
   const result = await prisma.trade.updateMany({
     where: { id: Number(req.params.id), userId: req.userId },

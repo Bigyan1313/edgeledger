@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { tradesApi } from './api/trades.js'
+import { accountsApi } from './api/accounts.js'
 import { useAuth } from './auth/AuthContext.jsx'
 import Nav from './components/Nav.jsx'
 import TradeForm from './components/TradeForm.jsx'
@@ -14,20 +15,28 @@ export default function App() {
   const { user, logout } = useAuth()
   const [tab, setTab] = useState('dashboard')
   const [trades, setTrades] = useState([])
+  const [accounts, setAccounts] = useState([])
   const [editingTrade, setEditingTrade] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // Load this user's trades whenever they log in (and re-run if the user changes).
+  // Load this user's trades + accounts whenever they log in (re-run if the user changes).
   useEffect(() => {
     if (!user) return
     setLoading(true)
     setError(null)
-    tradesApi.list()
-      .then(setTrades)
+    Promise.all([tradesApi.list(), accountsApi.list()])
+      .then(([t, a]) => { setTrades(t); setAccounts(a) })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
   }, [user])
+
+  // Create an account, add it to state, and return it (so the form can select it).
+  const handleAddAccount = async (data) => {
+    const acct = await accountsApi.create(data)
+    setAccounts(prev => [...prev, acct])
+    return acct
+  }
 
   // Not logged in → show the auth screen, nothing else.
   if (!user) return <AuthScreen />
@@ -87,6 +96,8 @@ export default function App() {
             {tab === 'log'       && (
               <TradeForm
                 editTrade={editingTrade}
+                accounts={accounts}
+                onAddAccount={handleAddAccount}
                 onCreated={handleCreated}
                 onUpdated={handleUpdated}
                 onCancelEdit={cancelEdit}

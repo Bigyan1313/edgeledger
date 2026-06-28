@@ -1,3 +1,5 @@
+import PnlCalendar from './PnlCalendar.jsx'
+
 function realizedR(trade) {
   const { direction, entryPrice: e, stopLoss: sl, exitPrice: ex, riskDollars: rd, pnl } = trade
   if (e && sl && ex) {
@@ -108,6 +110,9 @@ export default function Dashboard({ trades }) {
         <div className="text-[11px] text-muted mb-3">Equity Curve</div>
         <EquityCurve points={s.equity} />
       </div>
+
+      {/* Daily P&L calendar */}
+      <PnlCalendar trades={trades} />
 
       {/* Discipline mirror */}
       <DisciplineMirror trades={trades} />

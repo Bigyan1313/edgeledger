@@ -6,6 +6,7 @@ import Nav from './components/Nav.jsx'
 import TradeForm from './components/TradeForm.jsx'
 import CloseTradeForm from './components/CloseTradeForm.jsx'
 import TradeTable from './components/TradeTable.jsx'
+import AmendmentHistory from './components/AmendmentHistory.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import Calculators from './components/Calculators.jsx'
 import AuthScreen from './components/AuthScreen.jsx'
@@ -27,6 +28,10 @@ export default function App() {
   const [closingTrade, setClosingTrade] = useState(null)
   const [reviewingTrade, setReviewingTrade] = useState(null)
   const [amendingTrade, setAmendingTrade] = useState(null)
+
+  // Read-only view of a trade's audit trail. Not part of clearWork() — it is a
+  // lookup, not an edit in progress.
+  const [amendmentsTrade, setAmendmentsTrade] = useState(null)
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -196,6 +201,7 @@ export default function App() {
                   onClose={startClose}
                   onReview={startReview}
                   onAmend={startAmend}
+                  onShowAmendments={setAmendmentsTrade}
                 />
               </div>
             )}
@@ -204,6 +210,10 @@ export default function App() {
           </>
         )}
       </main>
+
+      {amendmentsTrade && (
+        <AmendmentHistory trade={amendmentsTrade} onClose={() => setAmendmentsTrade(null)} />
+      )}
     </div>
   )
 }

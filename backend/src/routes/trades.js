@@ -81,13 +81,11 @@ router.get('/', handle(async (req, res) => {
     where,
     orderBy: { entryTimeUtc: 'desc' },
   })
-  // Screenshots are base64 data URLs (can be ~1MB/trade), so they are stripped
-  // from the list payload and replaced with a count. The full images come back
-  // from GET /api/trades/:id when a single trade is opened.
-  res.json(serializeTrades(trades).map(({ screenshots, ...t }) => ({
-    ...t,
-    screenshotCount: screenshots?.length ?? 0,
-  })))
+  // Screenshots are base64 data URLs (can be ~1MB/trade), so the list drops the
+  // images themselves; `screenshotCount` comes from the serializer either way.
+  // The full images come back from GET /api/trades/:id.
+  // eslint-disable-next-line no-unused-vars -- destructured to omit
+  res.json(serializeTrades(trades).map(({ screenshots, ...rest }) => rest))
 }))
 
 // POST /api/trades — Stage A: the pre-trade record.

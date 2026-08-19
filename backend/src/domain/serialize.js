@@ -24,6 +24,11 @@ export function serializeTrade(trade) {
     rMultiple: computeRMultiple(trade),
     journalingLagMinutes: computeJournalingLagMinutes(trade),
     wasAmended: computeWasAmended(trade),
+    // Always present, even on payloads that keep the images themselves. The
+    // list strips `screenshots` and the client merges mutation responses into
+    // that same list, so a row's count must not depend on which endpoint it
+    // came from.
+    screenshotCount: trade.screenshots?.length ?? 0,
   }
 }
 

@@ -57,10 +57,17 @@ export default function App() {
     setTab('history')
   }
 
-  // Called by TradeTable's Edit button — open the form pre-filled
-  const handleEdit = (trade) => {
-    setEditingTrade(trade)
+  // Called by TradeTable's Edit button — open the form pre-filled.
+  // The list payload omits screenshots (they're heavy), so fetch the full
+  // record first; fall back to the list row if that fetch fails.
+  const handleEdit = async (trade) => {
     setTab('log')
+    try {
+      const full = await tradesApi.get(trade.id)
+      setEditingTrade(full)
+    } catch {
+      setEditingTrade(trade)
+    }
   }
 
   const cancelEdit = () => {

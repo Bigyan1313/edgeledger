@@ -15,13 +15,19 @@ async function accountAllowed(accountId, userId) {
   return Boolean(acct)
 }
 
-// GET /api/trades — list THIS user's trades, newest first
+// GET /api/trades — list THIS user's trades, newest first.
+// Screenshots are base64 data URLs (can be ~1MB/trade), so we strip them from
+// the list payload and return just a count. The full images come back from
+// GET /api/trades/:id when a single trade is opened (edit / lightbox).
 router.get('/', async (req, res) => {
   const trades = await prisma.trade.findMany({
     where: { userId: req.userId },
     orderBy: { date: 'desc' },
   })
-  res.json(trades)
+  res.json(trades.map(({ screenshots, ...t }) => ({
+    ...t,
+    screenshotCount: screenshots?.length ?? 0,
+  })))
 })
 
 // POST /api/trades — create a trade owned by this user

@@ -4,6 +4,7 @@ import healthRouter from './routes/health.js'
 import authRouter from './routes/auth.js'
 import tradesRouter from './routes/trades.js'
 import accountsRouter from './routes/accounts.js'
+import chatRouter from './routes/chat.js'
 import { requireAuth } from './auth/middleware.js'
 
 const app = express()
@@ -19,7 +20,7 @@ const allowedOrigins = (process.env.FRONTEND_ORIGIN || 'http://localhost:5173,ht
 
 // Middleware: runs on every request before your route handlers
 app.use(cors({ origin: allowedOrigins }))
-app.use(express.json())                              // parse JSON request bodies
+app.use(express.json({ limit: '12mb' }))             // parse JSON bodies (roomy: trades carry base64 screenshots)
 
 // Public routes (no token needed)
 app.use('/api', healthRouter)
@@ -28,6 +29,7 @@ app.use('/api/auth', authRouter)
 // Protected routes — requireAuth runs first and rejects anyone without a valid token
 app.use('/api/trades', requireAuth, tradesRouter)
 app.use('/api/accounts', requireAuth, accountsRouter)
+app.use('/api/chat', requireAuth, chatRouter)
 
 app.listen(PORT, () => {
   console.log(`Backend running on port ${PORT}`)

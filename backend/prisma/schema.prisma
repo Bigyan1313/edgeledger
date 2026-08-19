@@ -51,6 +51,8 @@ model Trade {
   emotionBefore     String?
   followedChecklist Boolean  @default(false)
   fullPort          Boolean  @default(false)
+  setupNotes        String?              // free-text about the setup itself (why it qualified)
+  screenshots       String[] @default([]) // chart screenshots, stored as compressed data URLs
   notes             String?
   createdAt         DateTime @default(now())
 }

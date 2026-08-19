@@ -1,5 +1,5 @@
 const COLUMNS = [
-  'id', 'date', 'pair', 'direction', 'setup',
+  'id', 'date', 'pair', 'direction', 'setup', 'setupNotes',
   'entryPrice', 'stopLoss', 'takeProfit', 'exitPrice',
   'lotSize', 'riskDollars', 'pnl', 'outcome',
   'emotionBefore', 'followedChecklist', 'fullPort', 'notes',

@@ -1,16 +1,10 @@
 import PnlCalendar from './PnlCalendar.jsx'
+import { RISKY_TECHNICAL_SETUPS } from '../constants/trade.js'
 
-function realizedR(trade) {
-  const { direction, entryPrice: e, stopLoss: sl, exitPrice: ex, riskDollars: rd, pnl } = trade
-  if (e && sl && ex) {
-    const risk = direction === 'long' ? e - sl : sl - e
-    if (risk > 0) return direction === 'long' ? (ex - e) / risk : (e - ex) / risk
-  }
-  if (rd && pnl !== null) return pnl / rd
-  return null
-}
-
-function computeStats(trades) {
+// Stats are computed over CLOSED trades only. An open Stage A entry has no
+// result yet, and folding it in as a zero would drag every average toward it.
+function computeStats(allTrades) {
+  const trades = allTrades.filter(t => t.entryStage !== 'pending_exit' && t.pnl != null)
   if (!trades.length) return null
 
   const wins   = trades.filter(t => t.outcome === 'Win')
@@ -25,16 +19,17 @@ function computeStats(trades) {
   const profitFactor = grossLoss ? grossWin / grossLoss : null
   const expectancy = winRate * avgWin - (1 - winRate) * avgLoss
 
-  const rValues = trades.map(realizedR).filter(r => r !== null)
+  // rMultiple is computed server-side (pnl / risk) and arrives on the trade.
+  const rValues = trades.map(t => t.rMultiple).filter(r => r != null)
   const avgR    = rValues.length ? rValues.reduce((s, r) => s + r, 0) / rValues.length : null
 
   const biggestLoss = losses.length ? Math.min(...losses.map(t => t.pnl)) : 0
   const fullPortCount = trades.filter(t => t.fullPort).length
 
-  // equity curve: sorted by date, running cumsum
-  const sorted = [...trades].sort((a, b) => new Date(a.date) - new Date(b.date))
+  // equity curve: sorted by entry time, running cumsum
+  const sorted = [...trades].sort((a, b) => new Date(a.entryTimeUtc) - new Date(b.entryTimeUtc))
   let running = 0
-  const equity = sorted.map(t => { running += t.pnl; return { date: t.date, equity: running } })
+  const equity = sorted.map(t => { running += t.pnl; return { date: t.entryTimeUtc, equity: running } })
 
   return { netPnl, winRate, avgWin, avgLoss, profitFactor, expectancy, avgR,
            biggestLoss, fullPortCount, totalTrades: trades.length, equity,
@@ -123,7 +118,8 @@ export default function Dashboard({ trades }) {
   )
 }
 
-function splitStats(group) {
+function splitStats(allTrades) {
+  const group = allTrades.filter(t => t.pnl != null)
   const pnl  = group.reduce((s, t) => s + t.pnl, 0)
   const wins = group.filter(t => t.outcome === 'Win').length
   const losses = group.filter(t => t.outcome === 'Loss').length
@@ -133,12 +129,14 @@ function splitStats(group) {
 
 function DisciplineMirror({ trades }) {
   // Checklist followed vs not
-  const followed = splitStats(trades.filter(t => t.followedChecklist))
-  const skipped  = splitStats(trades.filter(t => !t.followedChecklist))
+  // `followedChecklist` is nullable now: unanswered is neither followed nor
+  // skipped, and lumping it in with "skipped" would invent an answer.
+  const followed = splitStats(trades.filter(t => t.followedChecklist === true))
+  const skipped  = splitStats(trades.filter(t => t.followedChecklist === false))
 
-  // Calm vs not-calm
-  const calm    = splitStats(trades.filter(t => t.emotionBefore === 'Calm'))
-  const notCalm = splitStats(trades.filter(t => t.emotionBefore && t.emotionBefore !== 'Calm'))
+  // Calm vs not-calm, on the emotional axis Task 3 split out
+  const calm    = splitStats(trades.filter(t => t.emotionalState === 'Calm'))
+  const notCalm = splitStats(trades.filter(t => t.emotionalState && t.emotionalState !== 'Calm'))
 
   return (
     <div className="bg-surface border border-line rounded-xl p-4 space-y-4">
@@ -212,14 +210,14 @@ function EquityCurve({ points }) {
 }
 
 function SetupTable({ trades }) {
-  const DANGER = new Set(['Anticipation (no confirmation)', 'FOMO / Impulsive', 'News / Full-port', 'Revenge'])
-
   const bySetup = {}
   for (const t of trades) {
-    if (!bySetup[t.setup]) bySetup[t.setup] = { trades: 0, wins: 0, pnl: 0 }
-    bySetup[t.setup].trades++
-    if (t.outcome === 'Win') bySetup[t.setup].wins++
-    bySetup[t.setup].pnl += t.pnl
+    if (t.pnl == null) continue
+    const setup = t.technicalSetup ?? t.legacySetup ?? 'Unrecorded'
+    if (!bySetup[setup]) bySetup[setup] = { trades: 0, wins: 0, pnl: 0 }
+    bySetup[setup].trades++
+    if (t.outcome === 'Win') bySetup[setup].wins++
+    bySetup[setup].pnl += t.pnl
   }
 
   const rows = Object.entries(bySetup).sort((a, b) => b[1].pnl - a[1].pnl)
@@ -244,8 +242,8 @@ function SetupTable({ trades }) {
         </thead>
         <tbody className="divide-y divide-line-soft">
           {rows.map(([setup, s]) => (
-            <tr key={setup} className={DANGER.has(setup) ? 'text-red-400' : 'text-gray-300'}>
-              <td className="py-2 text-xs pr-2">{DANGER.has(setup) && '⚠ '}{setup}</td>
+            <tr key={setup} className={RISKY_TECHNICAL_SETUPS.has(setup) ? 'text-red-400' : 'text-gray-300'}>
+              <td className="py-2 text-xs pr-2">{RISKY_TECHNICAL_SETUPS.has(setup) && '⚠ '}{setup}</td>
               <td className="py-2 text-right text-gray-400">{s.trades}</td>
               <td className="py-2 text-right text-gray-400">
                 {((s.wins / s.trades) * 100).toFixed(0)}%

@@ -272,19 +272,67 @@ Defined in `backend/prisma/schema.prisma`. Two tables:
 | displayName | String? | |
 | createdAt | DateTime | |
 
-**Trade**
+**Trade (schema v2)**
+
+v2 exists because the v1 export could not be joined to broker execution data — zero of 44 rows matched a broker position — and three of its fields carried zero variance. Requiredness for the v2-only columns is enforced in `backend/src/domain/validation.js`, not by `NOT NULL`, because the 44 v1 rows genuinely lack those values and must survive; `schemaVersion` tells the two populations apart.
+
 | Field | Type | Notes |
 |---|---|---|
 | id | Int (PK) | |
 | userId | Int (FK → User) | **owner**; `onDelete: Cascade` |
-| date, pair, direction, setup | | core trade info |
-| entryPrice, stopLoss, takeProfit, exitPrice, lotSize, riskDollars | Float? | optional; used for precise R |
-| pnl | Float | the one required number for stats |
-| outcome | String | Win / Loss / Break-even |
-| emotionBefore, followedChecklist, fullPort, notes | | behavioral metadata |
+| schemaVersion | Int | 1 = legacy row, 2 = written under the current contract |
+| brokerPositionId | String? | the platform's own position ID — the join key to execution data; unique per user |
+| brokerAccountId, brokerPlatform | String? | which account, which platform (cTrader / MT4 / MT5 / other) |
+| entryTimeUtc, exitTimeUtc | DateTime | unambiguous UTC; `entryTimeUtc` replaces v1's `date` |
+| captureTimezone | String? | IANA zone the user was in at entry, e.g. `America/Chicago` |
+| pair | String | the broker's exact symbol string, e.g. `XAUUSD.pro` |
+| direction | String | long / short |
+| technicalSetup | String? | what the chart was doing |
+| emotionalState | String? | what the trader was doing — a separate axis, so a revenge trade keeps its setup |
+| legacySetup | String? | the v1 `setup` string, preserved verbatim |
+| entryPrice, stopLoss, takeProfit, exitPrice, lotSize | Float? | required and validated in v2 |
+| riskDollars | Float? | **legacy v1 only.** v2 computes risk from entry, stop, lot size and contract size |
+| pnl | Float? | null until the trade is closed |
+| followedChecklist, fullPort | Boolean? | no default — null means unanswered, which is not the same as "no" |
+| notes, exitNotes | String? | pre-trade reasoning and post-trade review |
+| journaledAt | DateTime | set once on first save, **never updated** |
+| lastEditedAt | DateTime? | moves on every save after the first |
+| entryStage | String | `pending_exit` or `complete` |
+| amendedAt | DateTime? | set when a locked Stage A field was changed |
+| dataQualityFlags | String[] | auto-computed; describes a row, never repairs it |
 | createdAt | DateTime | |
 
+**Computed, never stored** (`backend/src/domain/derived.js`): `outcome` from `pnl`, `riskDollars` from the committed numbers, `rMultiple` = pnl / risk, `journalingLagMinutes` = journaledAt − entryTimeUtc, `wasAmended` from `amendedAt`. Storing any of these would let them drift out of sync with the facts they summarise.
+
+**TradeAmendment**
+| Field | Type | Notes |
+|---|---|---|
+| id | Int (PK) | |
+| tradeId | Int (FK → Trade) | `onDelete: Cascade` |
+| field | String | which locked field changed |
+| oldValue, newValue | String? | rendered as text — this is a record, not a working value |
+| reason | String | why; required by the API |
+| amendedAt | DateTime | |
+
+One row per field per amendment, so "what did this trade say when it was first written?" is answerable from the data rather than from trust.
+
+**The two-stage flow.** Stage A (broker linkage, instrument, entry time, levels, size, both setup axes, pre-trade notes) is saved before or at entry and then locks. Stage B (exit time, exit price, P&L, review notes) is saved after the exit, through a different endpoint. Editing a Stage B value is an ordinary `PUT`; changing a Stage A value requires `POST /api/trades/:id/amend`, which writes the audit rows above. Schema alone cannot stop someone recording intent after seeing the outcome — the workflow is what makes contemporaneous journaling real.
+
 **The relationship:** one User has many Trades; each Trade belongs to one User via `userId`. This single foreign key is what makes the app multi-user — every trade query filters by it.
+
+### The export contract
+
+The CSV export (`frontend/src/utils/csv.js`) is the input to a separate analysis repository, so its column names and types are a contract rather than a convenience:
+
+- Column names are `snake_case` and stable — the pipeline reads them by name and hard-codes them.
+- Timestamps are ISO 8601 with an explicit `+00:00` offset.
+- Booleans are `true` / `false`. v1 wrote Python's `True` / `False`, which is not a CSV convention and forced a cleaning step downstream.
+- Absent values are truly empty cells — never `NaN`, `None`, or `null`.
+- `data_quality_flags` is pipe-separated (`legacy_unlinked|missing_stop_loss`), so it splits with `str.split('|')`.
+- Filename: `edgeledger-trades-v2-YYYY-MM-DD.csv`.
+- v1 rows are excluded by default. The History view's "Include v1 rows" toggle is the only way they enter an export, and they carry `schema_version=1` when they do.
+
+`pandas.read_csv()` on this file produces correct dtypes with no manual coercion. **One caveat for the pipeline:** `broker_position_id` is a string in the model, but cTrader IDs are all-digit, so pandas will infer `int64` for a file where every ID happens to be numeric and `object` for one where any ID is not. Read it as `dtype={'broker_position_id': str}` so joins stay stable across exports.
 
 ---
 

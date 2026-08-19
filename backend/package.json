@@ -5,7 +5,10 @@
   "scripts": {
     "dev": "node --watch --env-file-if-exists=.env src/index.js",
     "start": "node --env-file-if-exists=.env src/index.js",
-    "build": "prisma generate && prisma migrate deploy"
+    "build": "prisma generate && prisma migrate deploy",
+    "test": "node --test \"test/*.test.js\"",
+    "test:api": "node --test test/api.test.js",
+    "backfill:flags": "node --env-file-if-exists=.env scripts/backfill-data-quality-flags.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",

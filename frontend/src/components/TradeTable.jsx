@@ -26,6 +26,18 @@ function fmt(n, decimals = 2) {
 
 export default function TradeTable({ trades, onDeleted, onEdit }) {
   const [deleting, setDeleting] = useState(null)
+  const [viewing, setViewing] = useState(null) // { id, shots, loading } | null
+
+  // Screenshots aren't in the list payload — fetch the full trade on demand.
+  const openShots = async (trade) => {
+    setViewing({ id: trade.id, shots: [], loading: true })
+    try {
+      const full = await tradesApi.get(trade.id)
+      setViewing({ id: trade.id, shots: full.screenshots || [], loading: false })
+    } catch {
+      setViewing({ id: trade.id, shots: [], loading: false })
+    }
+  }
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this trade?')) return
@@ -47,11 +59,12 @@ export default function TradeTable({ trades, onDeleted, onEdit }) {
   }
 
   return (
+    <>
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-800">
-            {['Date', 'Pair', 'Dir', 'Setup', 'P&L', 'R', 'Outcome', 'Emotion', '✓', ''].map(h => (
+            {['Date', 'Pair', 'Dir', 'Setup', 'P&L', 'R', 'Outcome', 'Emotion', '✓', '📷', ''].map(h => (
               <th key={h} className="px-3 py-3 whitespace-nowrap">{h}</th>
             ))}
           </tr>
@@ -102,6 +115,19 @@ export default function TradeTable({ trades, onDeleted, onEdit }) {
                     ? <span className="text-emerald-400">✓</span>
                     : <span className="text-gray-700">✗</span>}
                 </td>
+                <td className="px-3 py-3 text-center">
+                  {trade.screenshotCount > 0 ? (
+                    <button
+                      onClick={() => openShots(trade)}
+                      title="View screenshots"
+                      className="text-xs text-gray-400 hover:text-emerald-400 transition-colors"
+                    >
+                      📷 {trade.screenshotCount}
+                    </button>
+                  ) : (
+                    <span className="text-gray-700 text-xs">—</span>
+                  )}
+                </td>
                 <td className="px-3 py-3 whitespace-nowrap">
                   <button
                     onClick={() => onEdit(trade)}
@@ -123,5 +149,44 @@ export default function TradeTable({ trades, onDeleted, onEdit }) {
         </tbody>
       </table>
     </div>
+
+    {viewing && (
+      <div
+        className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 sm:p-6"
+        onClick={() => setViewing(null)}
+      >
+        <div
+          className="bg-ink border border-gray-800 rounded-xl w-full max-w-4xl max-h-[88vh] overflow-y-auto p-5"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-white">Trade #{viewing.id} · Screenshots</h3>
+            <button
+              onClick={() => setViewing(null)}
+              className="text-gray-400 hover:text-white text-sm transition-colors"
+            >
+              Close ✕
+            </button>
+          </div>
+          {viewing.loading ? (
+            <div className="text-gray-400 text-sm py-12 text-center">Loading…</div>
+          ) : viewing.shots.length === 0 ? (
+            <div className="text-gray-500 text-sm py-12 text-center">No screenshots on this trade.</div>
+          ) : (
+            <div className="space-y-4">
+              {viewing.shots.map((src, i) => (
+                <img
+                  key={i}
+                  src={src}
+                  alt={`Trade ${viewing.id} screenshot ${i + 1}`}
+                  className="w-full rounded-lg border border-gray-800"
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+    </>
   )
 }

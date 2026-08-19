@@ -20,7 +20,7 @@ const allowedOrigins = (process.env.FRONTEND_ORIGIN || 'http://localhost:5173,ht
 
 // Middleware: runs on every request before your route handlers
 app.use(cors({ origin: allowedOrigins }))
-app.use(express.json())                              // parse JSON request bodies
+app.use(express.json({ limit: '12mb' }))             // parse JSON bodies (roomy: trades carry base64 screenshots)
 
 // Public routes (no token needed)
 app.use('/api', healthRouter)

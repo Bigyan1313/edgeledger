@@ -10,7 +10,8 @@ export default function PnlCalendar({ trades }) {
   const byDay = useMemo(() => {
     const map = {}
     for (const t of trades) {
-      const d = new Date(t.date)
+      if (t.pnl == null) continue
+      const d = new Date(t.entryTimeUtc)
       const k = dayKey(d.getFullYear(), d.getMonth(), d.getDate())
       if (!map[k]) map[k] = { pnl: 0, count: 0, wins: 0, losses: 0 }
       map[k].pnl += t.pnl
@@ -25,7 +26,7 @@ export default function PnlCalendar({ trades }) {
   const latest = useMemo(() => {
     if (!trades.length) return new Date()
     return trades.reduce((acc, t) => {
-      const d = new Date(t.date)
+      const d = new Date(t.entryTimeUtc)
       return d > acc ? d : acc
     }, new Date(0))
   }, [trades])

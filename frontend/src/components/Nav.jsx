@@ -5,7 +5,7 @@ const TABS = [
   { id: 'calc',      label: 'Calculators' },
 ]
 
-export default function Nav({ active, onChange, user, onLogout }) {
+export default function Nav({ active, onChange, user, onLogout, openCount = 0 }) {
   return (
     <nav className="border-b border-line bg-ink/80 backdrop-blur px-4 sm:px-6 flex items-center justify-between gap-3 sticky top-0 z-20">
       <div className="flex items-center gap-2 sm:gap-5 min-w-0">
@@ -23,6 +23,12 @@ export default function Nav({ active, onChange, user, onLogout }) {
               }`}
             >
               {tab.label}
+              {/* Trades still awaiting their Stage B close. */}
+              {tab.id === 'history' && openCount > 0 && (
+                <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-sky-500/15 text-sky-400 align-middle">
+                  {openCount}
+                </span>
+              )}
               {active === tab.id && (
                 <span className="absolute left-3 right-3 -bottom-px h-0.5 bg-emerald-400 rounded-full" />
               )}

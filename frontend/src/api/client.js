@@ -39,8 +39,15 @@ export async function request(path, options = {}) {
   }
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || `HTTP ${res.status}`)
+    const body = await res.json().catch(() => ({}))
+    const err = new Error(body.error || `HTTP ${res.status}`)
+    err.status = res.status
+    // The v2 validation rules each report their own field so the entry form can
+    // mark them individually instead of dumping one sentence at the top.
+    err.fieldErrors = body.fieldErrors ?? []
+    // A 409 from PUT names the locked Stage A fields the request tried to touch.
+    err.lockedFields = body.lockedFields ?? []
+    throw err
   }
 
   if (res.status === 204) return null

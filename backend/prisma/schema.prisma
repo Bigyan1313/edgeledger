@@ -10,8 +10,8 @@ datasource db {
 model User {
   id           Int       @id @default(autoincrement())
   email        String    @unique
-  passwordHash String?              // optional: Google-only users have no password
-  googleId     String?   @unique    // Google's stable user id (the "sub" claim)
+  passwordHash String? // optional: Google-only users have no password
+  googleId     String?   @unique // Google's stable user id (the "sub" claim)
   displayName  String?
   createdAt    DateTime  @default(now())
   trades       Trade[]
@@ -23,36 +23,137 @@ model Account {
   userId          Int
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name            String
-  mode            String   // "Live" | "Demo"
-  propFirm        String?  // for Demo accounts: prop firm name (null = plain practice / N/A)
+  mode            String // "Live" | "Demo"
+  propFirm        String? // for Demo accounts: prop firm name (null = plain practice / N/A)
   startingBalance Float?
   createdAt       DateTime @default(now())
   trades          Trade[]
 }
 
+// Schema v2. Two conventions run through this model:
+//
+//  1. Columns that v2 requires are still nullable at the database level. The
+//     44 v1 rows genuinely lack them and must survive migration (Task 8), so
+//     requiredness is enforced in src/domain/validation.js — which is also the
+//     only layer that can return the specific message each rule owes the user.
+//     schemaVersion tells the two populations apart.
+//
+//  2. No boolean or enum column carries a default. A defaulted field is worse
+//     than an empty one: it looks like a recorded observation when nobody
+//     observed anything. v1 proved it — emotionBefore was "Calm" on all 44
+//     rows and fullPort was false on all 44, carrying zero information each.
 model Trade {
-  id                Int      @id @default(autoincrement())
-  userId            Int
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  accountId         Int?
-  account           Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  date              DateTime
-  pair              String
-  direction         String
-  setup             String
-  entryPrice        Float?
-  stopLoss          Float?
-  takeProfit        Float?
-  exitPrice         Float?
-  lotSize           Float?
-  riskDollars       Float?
-  pnl               Float
-  outcome           String
-  emotionBefore     String?
-  followedChecklist Boolean  @default(false)
-  fullPort          Boolean  @default(false)
-  setupNotes        String?              // free-text about the setup itself (why it qualified)
-  screenshots       String[] @default([]) // chart screenshots, stored as compressed data URLs
-  notes             String?
-  createdAt         DateTime @default(now())
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId Int?
+  account   Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  // Task 8 — which contract this row was written under. 1 = pre-v2 legacy.
+  schemaVersion Int @default(2)
+
+  // Task 1 — broker linkage. The join key to execution data; without it the
+  // journal and the broker's records are two unrelated datasets.
+  brokerPositionId String?
+  brokerAccountId  String?
+  brokerPlatform   String? // cTrader | MT4 | MT5 | other
+
+  // Task 6 — unambiguous UTC. `entryTimeUtc` replaces v1's `date`, whose Z
+  // suffix could not be trusted to mean true UTC. captureTimezone records the
+  // IANA zone the user was in, so local-time questions stay answerable
+  // without making the stored instant ambiguous.
+  entryTimeUtc    DateTime
+  exitTimeUtc     DateTime?
+  captureTimezone String?
+
+  // Task 6 — the broker's exact symbol string (e.g. "XAUUSD.pro"), so it joins
+  // to execution data without a mapping table.
+  pair      String
+  direction String // long | short
+
+  // Task 3 — two orthogonal axes. v1's single `setup` enum mixed chart
+  // structure with trader state, so a revenge trade on a break & retest had to
+  // discard one of the two facts.
+  technicalSetup String?
+  emotionalState String?
+
+  // The v1 `setup` string, kept verbatim. The migration projects it onto
+  // whichever of the two axes it actually described and leaves the other NULL,
+  // because the other genuinely was not recorded. This column is what makes
+  // that projection reversible instead of lossy. v2 never writes it.
+  legacySetup String?
+
+  // Task 5 — required in v2 and validated: lot > 0, stop > 0, stop on the
+  // losing side of entry.
+  entryPrice Float?
+  stopLoss   Float?
+  takeProfit Float?
+  exitPrice  Float?
+  lotSize    Float?
+
+  // Legacy v1 column only. v2 never writes it — riskDollars is computed from
+  // entry, stop, lot size and contract size (src/domain/derived.js) so it
+  // cannot disagree with the numbers it is supposed to summarise. Kept so the
+  // v1 rows that do carry a user-entered figure keep it.
+  riskDollars Float?
+
+  // Nullable because a Stage A trade has been entered but not yet exited.
+  pnl Float?
+
+  // Task 4 — both are wired to real controls in the entry UI, so they survive;
+  // what does not survive is their default. v1's `emotionBefore` is gone,
+  // superseded by emotionalState.
+  followedChecklist Boolean?
+  fullPort          Boolean?
+
+  notes      String? // pre-trade: what you saw, why you took it
+  setupNotes String? // free-text about the setup itself (why it qualified)
+  exitNotes  String? // post-trade review
+
+  // Chart screenshots, stored as compressed data URLs. Evidence, not a claim:
+  // attaching one after the fact is legitimate, so this is never locked.
+  screenshots String[] @default([])
+
+  // Task 2 — journaling latency. journaledAt is written once and never
+  // updated; lastEditedAt moves on every save after the first. The gap between
+  // journaledAt and entryTimeUtc is what exposes retroactive journaling
+  // without depending on the user mentioning it in a note.
+  journaledAt  DateTime  @default(now())
+  lastEditedAt DateTime?
+
+  // Task 7 — two-stage entry. Stage A fields lock on save; changing one
+  // requires the amend path, which stamps amendedAt and writes an audit row.
+  entryStage String           @default("pending_exit")
+  amendedAt  DateTime?
+  amendments TradeAmendment[]
+
+  // Task 8 — recomputed on every write. Flags describe, they never repair.
+  dataQualityFlags String[] @default([])
+
+  createdAt DateTime @default(now())
+
+  // Task 1 — a position ID identifies one position exactly once. Scoped to the
+  // user because broker position IDs are only unique within a broker account:
+  // two traders on the same broker can legitimately hold the same ID, and a
+  // global constraint would lock the second one out of their own journal
+  // forever. Postgres treats NULLs as distinct, so the unlinked v1 rows do not
+  // collide with each other.
+  @@unique([userId, brokerPositionId])
+  @@index([userId, schemaVersion])
+}
+
+// Task 7 — the audit trail. One row per field changed per amendment, so
+// "what did this trade say when it was first written?" is answerable from the
+// data rather than from trust.
+model TradeAmendment {
+  id        Int      @id @default(autoincrement())
+  tradeId   Int
+  trade     Trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  field     String
+  oldValue  String? // rendered as text: this is a record, not a working value
+  newValue  String?
+  reason    String?
+  amendedAt DateTime @default(now())
+
+  @@index([tradeId])
 }

@@ -10,10 +10,14 @@ A personal **trading journal + performance analytics** web app for discretionary
 
 ## Features
 
-**Journaling**
-- Log, edit, and delete trades with full ICT-style metadata (setup, direction, emotion, checklist adherence)
-- Trade history table with danger-setup flagging
-- CSV export
+**Journaling (schema v2)**
+- **Two-stage entry** — the plan (setup, levels, size, emotional state) is recorded *before* the trade; the result is recorded after, through a separate screen. Stage A fields lock on save.
+- **Amendments leave a record** — changing a locked pre-trade field requires a reason and writes an audit row holding the original value, so contemporaneous entries stay distinguishable from revised ones
+- **Broker linkage** — every trade carries the platform's own position ID, so the journal joins to broker execution data without guesswork
+- **Two orthogonal setup axes** — technical setup (what the chart did) and emotional state (what you did), recorded independently
+- Validated risk fields: stop, entry, and lot size required, with the stop checked against the direction
+- Trade history table with data-quality flags and a toggle for legacy v1 rows
+- CSV export built for a downstream analysis pipeline (snake_case, UTC offsets, real booleans)
 
 **Analytics dashboard**
 - Net P&L, win rate, profit factor, expectancy per trade, average R
@@ -129,9 +133,13 @@ The analytics are only as good as their formulas. The ones EdgeLedger holds to:
 
 ```
 planned R:R   = reward / risk
-realized R     long:  (exit - entry) / (entry - stopLoss)
-               short: (entry - exit) / (stopLoss - entry)
-               fallback: pnl / riskDollars
+
+// v2: risk is computed from what was actually committed, never typed in.
+riskDollars   = |entry - stopLoss| * lotSize * contractSize(symbol)
+rMultiple     = pnl / riskDollars                 // null when risk is unknown
+outcome       = sign(pnl)                          // computed, never stored
+
+journalingLagMinutes = journaledAt - entryTimeUtc  // exposes retroactive entries
 
 win rate      = wins / (wins + losses)          // break-evens excluded
 expectancy ($)= winRate * avgWin - lossRate * avgLoss

@@ -74,6 +74,12 @@ Specifically:
 - A dash, an em dash, "-", or an empty cell means the field is not set. That is null, not zero.
 - Negative P&L is negative. Parentheses, a minus sign, or red text all mean a loss.
 
+Number formats trip transcription more than anything else. Read carefully:
+- "1,234.56" is one thousand two hundred thirty-four point five six. "1.234,56" is the same number written the European way. Decide which convention the screenshot uses by looking at the other numbers on it, then read all of them the same way.
+- Losses appear as "-55.00", "(55.00)", or plain red text. All three are negative.
+- Volume and lots are different units. A "Volume" column reading 100,000 or 10k is units, not lots — 100,000 units of a standard FX pair is 1.0 lots. Report lotSize in LOTS. If the screenshot only shows units and you are not certain of the conversion, set lotSize to null and name it in unreadableFields.
+- A price column may show more decimal places than the instrument trades in. Transcribe exactly what is printed; do not round.
+
 If the image is not a trading screenshot at all, set every field to null and isClosed to false.
 
 The person using this will review everything you return before it is saved. A null they have to fill in costs them five seconds. A wrong number they do not notice corrupts their records permanently. Prefer null.`
@@ -173,6 +179,41 @@ export function normalizeExtraction(raw) {
     }
   }
 
+  // A lot size in the thousands is a Volume column read as lots. 100,000 units
+  // of a standard FX pair is 1.0 lots, so a "lot size" of 100000 would compute a
+  // risk figure five orders of magnitude too large.
+  if (isNum(out.lotSize) && out.lotSize >= 1000) {
+    warnings.push({
+      field: 'lotSize',
+      message: `Read as ${out.lotSize}, which looks like a volume in units rather than lots. Dropped — enter the lot size your platform shows.`,
+    })
+    out.lotSize = null
+  }
+
+  // The sign of P&L has to agree with the direction the price actually moved. A
+  // long that exited above entry cannot have lost money, so a disagreement means
+  // one of the three was misread and none of them can be trusted on its own.
+  if (isNum(out.pnl) && isNum(out.entryPrice) && isNum(out.exitPrice) && out.direction) {
+    const move = out.direction === 'long' ? out.exitPrice - out.entryPrice : out.entryPrice - out.exitPrice
+    const disagrees = (move > 0 && out.pnl < 0) || (move < 0 && out.pnl > 0)
+    if (disagrees) {
+      warnings.push({
+        field: 'pnl',
+        message: `P&L of ${out.pnl} disagrees with a ${out.direction} from ${out.entryPrice} to ${out.exitPrice}. One of these was misread — check all three against your platform.`,
+      })
+    }
+  }
+
+  // Exit before entry is a date misread — most often a day/month swap on a
+  // non-ISO screenshot. Reported rather than dropped: the user can see at a
+  // glance which of the two is wrong, and the form rejects the pair anyway.
+  if (out.entryTimeUtc && out.exitTimeUtc && new Date(out.exitTimeUtc) < new Date(out.entryTimeUtc)) {
+    warnings.push({
+      field: 'exitTimeUtc',
+      message: `Exit time reads earlier than entry time. Likely a day/month swap — check both dates.`,
+    })
+  }
+
   return { fields: out, warnings, unreadableFields: unreadable }
 }
 
@@ -201,4 +242,32 @@ export function parseImageDataUrl(dataUrl) {
     return { error: `That image is ${(bytes / 1024 / 1024).toFixed(1)}MB. Keep screenshots under ${MAX_IMAGE_BYTES / 1024 / 1024}MB.` }
   }
   return { mediaType: mediaType.toLowerCase(), data }
+}
+
+// The Messages request itself. Lives here rather than in the route so the eval
+// harness can exercise the exact same call the app makes — an eval that hits a
+// different prompt or schema measures the wrong thing.
+export async function callExtractionModel(client, { mediaType, data }) {
+  const response = await client.messages.create({
+    model: EXTRACTION_MODEL,
+    max_tokens: 2048,
+    system: [
+      // Prompt and tool schema are byte-identical on every request, so they form
+      // a stable cacheable prefix ahead of the volatile image.
+      { type: 'text', text: EXTRACTION_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
+    ],
+    tools: [EXTRACTION_TOOL],
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data } },
+          { type: 'text', text: 'Transcribe the trade in this screenshot. Anything not legible is null.' },
+        ],
+      },
+    ],
+  })
+
+  const call = response.content.find(b => b.type === 'tool_use' && b.name === EXTRACTION_TOOL.name)
+  return { input: call?.input ?? null, usage: response.usage }
 }

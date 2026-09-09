@@ -8,7 +8,9 @@
     "build": "prisma generate && prisma migrate deploy",
     "test": "node --test \"test/*.test.js\"",
     "test:api": "node --test test/api.test.js",
-    "backfill:flags": "node --env-file-if-exists=.env scripts/backfill-data-quality-flags.js"
+    "backfill:flags": "node --env-file-if-exists=.env scripts/backfill-data-quality-flags.js",
+    "eval:fixtures": "node eval/build-fixtures.mjs",
+    "eval:accuracy": "node eval/run-accuracy.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.106.0",

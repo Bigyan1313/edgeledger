@@ -10,6 +10,7 @@ import {
   extractionCoverage,
   parseImageDataUrl,
   EXTRACTION_TOOL,
+  EXTRACTION_SYSTEM_PROMPT,
   MAX_IMAGE_BYTES,
 } from '../src/domain/extraction.js'
 
@@ -85,11 +86,12 @@ test('a stop on the wrong side of entry drops both, since either could be the mi
 })
 
 test('a valid short is not mistaken for a wrong-side stop', () => {
+  // A coherent short: entered 2360, stop above at 2370, exited lower for a win.
   const { fields, warnings } = normalizeExtraction(
-    goodRead({ direction: 'short', entryPrice: 2350, stopLoss: 2360 })
+    goodRead({ direction: 'short', entryPrice: 2360, stopLoss: 2370, exitPrice: 2350, pnl: 500 })
   )
-  assert.equal(fields.stopLoss, 2360)
-  assert.equal(fields.entryPrice, 2350)
+  assert.equal(fields.stopLoss, 2370)
+  assert.equal(fields.entryPrice, 2360)
   assert.deepEqual(warnings, [])
 })
 
@@ -200,4 +202,78 @@ test('a timestamp with an explicit offset is trusted and not warned about', () =
   const { fields, warnings } = normalizeExtraction(goodRead({ entryTimeUtc: '2026-08-01T08:30:00-05:00' }))
   assert.equal(fields.entryTimeUtc, '2026-08-01T13:30:00.000Z')
   assert.ok(!warnings.some(w => w.field === 'entryTimeUtc'))
+})
+
+// --- guards against the misreads that actually cost money -------------------
+//
+// Each of these catches a wrong value using only cross-field arithmetic, so it
+// holds regardless of how well the model read the image.
+
+test('a Volume column read as lots is caught before it reaches risk', () => {
+  // cTrader and MT5 show FX size in units: 100,000 units = 1.0 lots. Taken as a
+  // lot size, that inflates riskDollars by five orders of magnitude.
+  for (const volume of [1000, 10000, 100000, 1_000_000]) {
+    const { fields, warnings } = normalizeExtraction(goodRead({ lotSize: volume }))
+    assert.equal(fields.lotSize, null, `${volume} should not survive as a lot size`)
+    assert.match(warnings.find(w => w.field === 'lotSize').message, /volume in units/i)
+  }
+})
+
+test('a realistic lot size is left alone', () => {
+  for (const lots of [0.01, 0.1, 0.5, 2, 16.83, 999]) {
+    const { fields } = normalizeExtraction(goodRead({ lotSize: lots }))
+    assert.equal(fields.lotSize, lots)
+  }
+})
+
+test('a P&L sign that contradicts the price move is reported', () => {
+  // Long 2350 -> 2360 is a win; a negative P&L means one of the three is wrong.
+  const { warnings } = normalizeExtraction(
+    goodRead({ direction: 'long', entryPrice: 2350, exitPrice: 2360, pnl: -500 })
+  )
+  assert.match(warnings.find(w => w.field === 'pnl').message, /disagrees/i)
+})
+
+test('a losing trade with a consistent sign raises nothing', () => {
+  const { warnings } = normalizeExtraction(
+    goodRead({ direction: 'long', entryPrice: 2350, exitPrice: 2340, pnl: -500 })
+  )
+  assert.deepEqual(warnings, [])
+})
+
+test('a scratch exit imposes no P&L constraint — fees decide the sign', () => {
+  const { warnings } = normalizeExtraction(
+    goodRead({ direction: 'long', entryPrice: 2350, exitPrice: 2350, pnl: -8 })
+  )
+  assert.deepEqual(warnings, [])
+})
+
+test('an exit before entry is flagged as a likely day/month swap', () => {
+  const { warnings } = normalizeExtraction(goodRead({
+    entryTimeUtc: '2026-08-09T13:30:00Z',
+    exitTimeUtc: '2026-09-08T15:00:00Z'.replace('2026-09-08', '2026-08-01'),
+  }))
+  assert.match(warnings.find(w => w.field === 'exitTimeUtc').message, /day\/month swap/i)
+})
+
+test('the guards compose — several misreads are all reported at once', () => {
+  const { fields, warnings } = normalizeExtraction(goodRead({
+    lotSize: 100000,
+    stopLoss: 0,
+    entryPrice: 2350, exitPrice: 2360, pnl: -500,
+  }))
+  assert.equal(fields.lotSize, null)
+  assert.equal(fields.stopLoss, null)
+  const flagged = warnings.map(w => w.field)
+  assert.ok(flagged.includes('lotSize'))
+  assert.ok(flagged.includes('stopLoss'))
+  assert.ok(flagged.includes('pnl'))
+})
+
+test('the prompt names the number-format traps explicitly', () => {
+  // These are the transcription failures that produce a plausible wrong number
+  // rather than an obvious one, so the prompt has to address them by name.
+  for (const trap of [/1\.234,56/, /Volume and lots are different units/i, /\(55\.00\)/, /do not round/i]) {
+    assert.match(EXTRACTION_SYSTEM_PROMPT, trap, `prompt should address ${trap}`)
+  }
 })

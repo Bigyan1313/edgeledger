@@ -1,0 +1,116 @@
+[
+  {
+    "name": "ctrader-closed-long",
+    "image": "ctrader-closed-long.png",
+    "note": "Clean read — every field present and unambiguous.",
+    "truth": {
+      "brokerPositionId": "184052117",
+      "pair": "XAUUSD.pro",
+      "direction": "long",
+      "lotSize": 0.5,
+      "entryPrice": 2350.15,
+      "stopLoss": 2345,
+      "takeProfit": 2365,
+      "exitPrice": 2360.4,
+      "pnl": 512.5,
+      "isClosed": true
+    }
+  },
+  {
+    "name": "ctrader-loss-no-stop",
+    "image": "ctrader-loss-no-stop.png",
+    "note": "A dash means no stop (null, not 0); a parenthesised P&L is negative.",
+    "truth": {
+      "brokerPositionId": "184052993",
+      "pair": "NAS100.pro",
+      "direction": "short",
+      "lotSize": 1.2,
+      "entryPrice": 19845.2,
+      "stopLoss": null,
+      "takeProfit": null,
+      "exitPrice": 19902.75,
+      "pnl": -690.6,
+      "isClosed": true
+    }
+  },
+  {
+    "name": "mt5-european-decimals",
+    "image": "mt5-european-decimals.png",
+    "note": "Comma is the decimal separator. Misreading 2,50 as 250 inflates risk 100x.",
+    "truth": {
+      "brokerPositionId": "77120458",
+      "pair": "EURUSD",
+      "direction": "long",
+      "lotSize": 2.5,
+      "entryPrice": 1.08453,
+      "stopLoss": 1.082,
+      "exitPrice": 1.08791,
+      "pnl": 843.5,
+      "isClosed": true
+    }
+  },
+  {
+    "name": "units-not-lots",
+    "image": "units-not-lots.png",
+    "note": "100,000 units = 1.0 lots. Reporting 100000 as lotSize is the damaging failure; null is acceptable.",
+    "truth": {
+      "brokerPositionId": "99001234",
+      "pair": "GBPJPY",
+      "direction": "long",
+      "lotSize": 1,
+      "entryPrice": 193.412,
+      "stopLoss": 192.9,
+      "exitPrice": 194.055,
+      "pnl": 418.9,
+      "isClosed": true
+    }
+  },
+  {
+    "name": "open-position",
+    "image": "open-position.png",
+    "note": "Still open: no exit price, and unrealised P&L is not realised P&L.",
+    "truth": {
+      "brokerPositionId": "184060777",
+      "pair": "XAUUSD.pro",
+      "direction": "long",
+      "lotSize": 0.25,
+      "entryPrice": 2402.8,
+      "stopLoss": 2396.5,
+      "takeProfit": 2418,
+      "exitPrice": null,
+      "isClosed": false
+    }
+  },
+  {
+    "name": "cropped-columns",
+    "image": "cropped-columns.png",
+    "note": "Columns absent from the image must be null, not inferred.",
+    "truth": {
+      "brokerPositionId": "184051002",
+      "pair": "US30.pro",
+      "direction": "short",
+      "lotSize": 0.8,
+      "entryPrice": 41250.5,
+      "stopLoss": 41400,
+      "exitPrice": null,
+      "pnl": null,
+      "isClosed": false
+    }
+  },
+  {
+    "name": "not-a-trade",
+    "image": "not-a-trade.png",
+    "note": "Everything null. Inventing a trade here is the worst possible failure.",
+    "truth": {
+      "brokerPositionId": null,
+      "pair": null,
+      "direction": null,
+      "lotSize": null,
+      "entryPrice": null,
+      "stopLoss": null,
+      "exitPrice": null,
+      "pnl": null,
+      "isClosed": false
+    }
+  }
+]

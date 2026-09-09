@@ -16,6 +16,44 @@ model User {
   createdAt    DateTime  @default(now())
   trades       Trade[]
   accounts     Account[]
+  profile      Profile?
+}
+
+// The trader behind the journal, and the defaults that make logging faster.
+//
+// Kept out of User on purpose: User is identity and authentication, and this is
+// preference data that changes for different reasons and on a different
+// schedule. Every field is optional — a profile is something you fill in over
+// time, and an unset default must stay distinguishable from a chosen one, the
+// same rule the trade model follows.
+model Profile {
+  id     Int  @id @default(autoincrement())
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Shown around the app instead of the email address.
+  displayName String?
+
+  // The IANA zone stamped onto captureTimezone at entry. Detected from the
+  // browser when unset; stored here so a trader who travels can pin the zone
+  // their journal should be read in.
+  timezone String?
+
+  // What the P&L column is denominated in. Display only — nothing is converted,
+  // because a converted figure is a derived number the journal did not witness.
+  baseCurrency String?
+
+  // Stage A defaults. These exist to cut typing: the platform and broker account
+  // are the same on nearly every trade, and retyping them is exactly the friction
+  // that stops journals getting filled in.
+  defaultBrokerPlatform  String?
+  defaultBrokerAccountId String?
+
+  // Seeds the position-size calculator.
+  defaultRiskPercent Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Account {

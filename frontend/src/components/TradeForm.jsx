@@ -47,6 +47,18 @@ const EMPTY = {
   screenshots: [],
 }
 
+// A blank entry seeded with whatever the trader set as their defaults. Only the
+// fields that are genuinely the same every time — the platform and the broker
+// account. Never the setup or the emotional state: those are judgements about
+// this trade, and a remembered answer is indistinguishable from a fresh one.
+function emptyFormFor(profile) {
+  return {
+    ...EMPTY,
+    brokerPlatform: profile?.defaultBrokerPlatform || EMPTY.brokerPlatform,
+    brokerAccountId: profile?.defaultBrokerAccountId || '',
+  }
+}
+
 // Turn a saved trade into form state (strings, local datetime) for amending.
 function tradeToForm(t) {
   return {
@@ -84,9 +96,9 @@ function plannedRR(form) {
 const num = (v) => (v === '' || v === null ? null : parseFloat(v))
 const bool = (v) => (v === '' ? null : v === 'true')
 
-export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onCreated, onAmended, onCancelAmend }) {
+export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onCreated, onAmended, onCancelAmend, profile = null }) {
   const isAmending = Boolean(amendTrade)
-  const [form, setForm] = useState(amendTrade ? tradeToForm(amendTrade) : EMPTY)
+  const [form, setForm] = useState(amendTrade ? tradeToForm(amendTrade) : emptyFormFor(profile))
   const [reason, setReason] = useState('')
   const [timezone, setTimezone] = useState(detectTimezone())
   const [saving, setSaving] = useState(false)
@@ -96,12 +108,14 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
   const [fieldErrors, setFieldErrors] = useState({})
 
   useEffect(() => {
-    setForm(amendTrade ? tradeToForm(amendTrade) : EMPTY)
-    setTimezone(amendTrade?.captureTimezone || detectTimezone())
+    setForm(amendTrade ? tradeToForm(amendTrade) : emptyFormFor(profile))
+    // The journal timezone is the trader's stated one if they pinned it, and the
+    // browser's only as a fallback.
+    setTimezone(amendTrade?.captureTimezone || profile?.timezone || detectTimezone())
     setReason('')
     setError(null)
     setFieldErrors({})
-  }, [amendTrade])
+  }, [amendTrade, profile])
 
   const set = (field, value) => {
     setForm(f => ({ ...f, [field]: value }))
@@ -198,7 +212,7 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
       } else {
         const created = await tradesApi.create(payload)
         onCreated(created)
-        setForm(EMPTY)
+        setForm(emptyFormFor(profile))
       }
     } catch (err) {
       setError(err.message)

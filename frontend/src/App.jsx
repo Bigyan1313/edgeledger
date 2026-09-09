@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { tradesApi } from './api/trades.js'
 import { accountsApi } from './api/accounts.js'
+import { profileApi } from './api/profile.js'
 import { useAuth } from './auth/AuthContext.jsx'
 import Nav from './components/Nav.jsx'
 import TradeForm from './components/TradeForm.jsx'
@@ -9,6 +10,7 @@ import TradeTable from './components/TradeTable.jsx'
 import AmendmentHistory from './components/AmendmentHistory.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import Calculators from './components/Calculators.jsx'
+import Profile from './components/Profile.jsx'
 import AuthScreen from './components/AuthScreen.jsx'
 import WakingScreen from './components/WakingScreen.jsx'
 import { downloadCsv, selectExportRows } from './utils/csv.js'
@@ -18,6 +20,7 @@ export default function App() {
   const [tab, setTab] = useState('dashboard')
   const [trades, setTrades] = useState([])
   const [accounts, setAccounts] = useState([])
+  const [profile, setProfile] = useState(null)
 
   // Task 8: v1 rows stay out of every view until asked for, by name.
   const [includeLegacy, setIncludeLegacy] = useState(false)
@@ -46,8 +49,8 @@ export default function App() {
   useEffect(() => {
     if (!user) return
     setError(null)
-    Promise.all([tradesApi.list({ includeLegacy }), accountsApi.list()])
-      .then(([t, a]) => { setTrades(t); setAccounts(a) })
+    Promise.all([tradesApi.list({ includeLegacy }), accountsApi.list(), profileApi.get()])
+      .then(([t, a, p]) => { setTrades(t); setAccounts(a); setProfile(p) })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
   }, [user, includeLegacy])
@@ -157,6 +160,7 @@ export default function App() {
                   onCreated={handleCreated}
                   onAmended={handleAmended}
                   onCancelAmend={() => { clearWork(); setTab('history') }}
+                  profile={profile}
                 />
               )
             )}
@@ -207,6 +211,8 @@ export default function App() {
             )}
 
             {tab === 'calc' && <Calculators />}
+
+            {tab === 'profile' && <Profile onSaved={setProfile} />}
           </>
         )}
       </main>

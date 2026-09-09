@@ -4,6 +4,7 @@ import healthRouter from './routes/health.js'
 import authRouter from './routes/auth.js'
 import tradesRouter from './routes/trades.js'
 import accountsRouter from './routes/accounts.js'
+import profileRouter from './routes/profile.js'
 import chatRouter from './routes/chat.js'
 import extractRouter from './routes/extract.js'
 import { requireAuth } from './auth/middleware.js'
@@ -30,6 +31,7 @@ app.use('/api/auth', authRouter)
 app.use('/api/trades', requireAuth, extractRouter)
 app.use('/api/trades', requireAuth, tradesRouter)
 app.use('/api/accounts', requireAuth, accountsRouter)
+app.use('/api/profile', requireAuth, profileRouter)
 app.use('/api/chat', requireAuth, chatRouter)
 
 // Anything a route handler could not answer for itself. Logged in full server

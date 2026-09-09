@@ -3,6 +3,7 @@ const TABS = [
   { id: 'log',       label: 'Log Trade' },
   { id: 'history',   label: 'History' },
   { id: 'calc',      label: 'Calculators' },
+  { id: 'profile',   label: 'Profile' },
 ]
 
 export default function Nav({ active, onChange, user, onLogout, openCount = 0 }) {

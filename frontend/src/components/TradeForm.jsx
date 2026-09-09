@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { tradesApi } from '../api/trades.js'
 import AccountSelector from './AccountSelector.jsx'
 import { fileToCompressedDataUrl } from '../utils/image.js'
+import ScreenshotImport from './ScreenshotImport.jsx'
 import {
   BROKER_PLATFORMS,
   EMOTIONAL_STATES,
@@ -90,6 +91,7 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
   const [timezone, setTimezone] = useState(detectTimezone())
   const [saving, setSaving] = useState(false)
   const [processingImg, setProcessingImg] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [error, setError] = useState(null)
   const [fieldErrors, setFieldErrors] = useState({})
 
@@ -134,6 +136,29 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
 
   const removeScreenshot = (i) =>
     setForm(f => ({ ...f, screenshots: f.screenshots.filter((_, idx) => idx !== i) }))
+
+  // Apply an extraction to the form. Null fields are skipped rather than
+  // written, so an import never wipes something the user already typed.
+  const applyExtraction = (fields) => {
+    const toLocal = (iso) => (iso ? isoToLocalInput(iso) : '')
+    setForm(f => {
+      const next = { ...f }
+      const put = (key, value) => { if (value !== null && value !== undefined) next[key] = value }
+      put('brokerPositionId', fields.brokerPositionId)
+      put('brokerAccountId', fields.brokerAccountId)
+      put('brokerPlatform', fields.brokerPlatform)
+      put('pair', fields.pair)
+      put('direction', fields.direction)
+      if (fields.entryTimeUtc) next.entryTimeUtc = toLocal(fields.entryTimeUtc)
+      put('entryPrice', fields.entryPrice)
+      put('stopLoss', fields.stopLoss)
+      put('takeProfit', fields.takeProfit)
+      put('lotSize', fields.lotSize)
+      return next
+    })
+    setFieldErrors({})
+    setImporting(false)
+  }
 
   const stampNow = () => set('entryTimeUtc', isoToLocalInput(new Date().toISOString()))
 
@@ -215,6 +240,17 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
           )}
         </div>
       </div>
+
+      {!isAmending && (
+        importing ? (
+          <ScreenshotImport onApply={applyExtraction} onDismiss={() => setImporting(false)} />
+        ) : (
+          <button type="button" onClick={() => setImporting(true)}
+            className="w-full py-2.5 border border-dashed border-gray-700 rounded-lg text-sm text-gray-400 hover:border-emerald-600 hover:text-emerald-400 transition-colors">
+            ⇪ Import from a screenshot instead of typing
+          </button>
+        )
+      )}
 
       {isAmending && (
         <div className="bg-amber-950/60 border border-amber-700/60 rounded-lg px-4 py-3 text-amber-300 text-sm space-y-2">

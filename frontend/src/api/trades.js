@@ -12,6 +12,10 @@ export const tradesApi = {
     return request(`/trades${query ? `?${query}` : ''}`)
   },
 
+  // Read a broker screenshot into a draft. Returns fields to review — it never
+  // creates a trade; the user confirms and saves.
+  extract: (image) => request('/trades/extract', { method: 'POST', body: JSON.stringify({ image }) }),
+
   // Stage A — the pre-trade record. These fields lock on save.
   create: (data) => request('/trades', { method: 'POST', body: JSON.stringify(data) }),
 

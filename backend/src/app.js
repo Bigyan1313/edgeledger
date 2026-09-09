@@ -5,6 +5,7 @@ import authRouter from './routes/auth.js'
 import tradesRouter from './routes/trades.js'
 import accountsRouter from './routes/accounts.js'
 import chatRouter from './routes/chat.js'
+import extractRouter from './routes/extract.js'
 import { requireAuth } from './auth/middleware.js'
 
 const app = express()
@@ -24,6 +25,9 @@ app.use('/api', healthRouter)
 app.use('/api/auth', authRouter)
 
 // Protected routes — requireAuth runs first and rejects anyone without a valid token
+// Mounted before tradesRouter: a future `POST /:id` there would otherwise
+// shadow `POST /extract`.
+app.use('/api/trades', requireAuth, extractRouter)
 app.use('/api/trades', requireAuth, tradesRouter)
 app.use('/api/accounts', requireAuth, accountsRouter)
 app.use('/api/chat', requireAuth, chatRouter)

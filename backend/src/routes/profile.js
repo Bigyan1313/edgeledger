@@ -4,6 +4,9 @@ import { validateProfile, coerceProfile, emptyProfile, PROFILE_FIELDS } from '..
 
 const router = Router()
 
+// Express 4 needs rejected async handlers forwarded to the error middleware.
+const handle = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
+
 // Every route assumes requireAuth has set req.userId.
 
 function serializeProfile(row, user) {
@@ -20,7 +23,7 @@ function serializeProfile(row, user) {
 // A missing row is not an error; it is a profile nobody has filled in yet. It
 // returns the same shape with every field null so the client renders one form
 // either way.
-router.get('/', async (req, res) => {
+router.get('/', handle(async (req, res) => {
   const [row, user] = await Promise.all([
     prisma.profile.findUnique({ where: { userId: req.userId } }),
     prisma.user.findUnique({ where: { id: req.userId }, select: { email: true, displayName: true } }),
@@ -31,14 +34,14 @@ router.get('/', async (req, res) => {
   // trader sets their own.
   if (!profile.displayName) profile.displayName = user?.displayName ?? null
   res.json(profile)
-})
+}))
 
 // PUT /api/profile — create or update it.
 //
 // Upsert rather than separate create/update: a profile is a single thing per
 // user that either exists or doesn't, and making the client care which is a
 // distinction without a difference.
-router.put('/', async (req, res) => {
+router.put('/', handle(async (req, res) => {
   const input = coerceProfile(req.body ?? {})
   const errors = validateProfile(input)
   if (errors.length) {
@@ -58,6 +61,6 @@ router.put('/', async (req, res) => {
     where: { id: req.userId }, select: { email: true, displayName: true },
   })
   res.json(serializeProfile(row, user))
-})
+}))
 
 export default router

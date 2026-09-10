@@ -1,9 +1,7 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { authApi } from '../api/auth.js'
 import { setToken, clearAuth, getStoredUser, setStoredUser } from '../api/client.js'
-
-// A Context is a "broadcast channel" any component can subscribe to.
-const AuthContext = createContext(null)
+import { AuthContext } from './context.js'
 
 export function AuthProvider({ children }) {
   // Initialise from localStorage so a page refresh keeps you logged in.
@@ -46,11 +44,4 @@ export function AuthProvider({ children }) {
       {children}
     </AuthContext.Provider>
   )
-}
-
-// Convenience hook so components write `const { user } = useAuth()`.
-export function useAuth() {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used inside <AuthProvider>')
-  return ctx
 }

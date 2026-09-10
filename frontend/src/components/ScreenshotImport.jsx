@@ -67,7 +67,7 @@ export default function ScreenshotImport({ onApply, onDismiss }) {
         <div>
           <h3 className="text-sm font-semibold text-bright">Import from a screenshot</h3>
           <p className="text-xs text-muted mt-1">
-            Drop in your platform's position or history panel. Everything read is filled into the
+            Choose your platform's position or history panel. Entry fields are filled into the
             form below for you to check — nothing is saved until you save it.
           </p>
         </div>
@@ -115,6 +115,7 @@ export default function ScreenshotImport({ onApply, onDismiss }) {
               This screenshot shows a <strong>closed</strong> trade, so the entry is being written after
               the result was known. It will be saved with a <code>retroactive_journal</code> flag — that
               is accurate, not a problem, but it means the recorded intent is not contemporaneous.
+              {' '}Save the entry first, then use Close in History to record its exit details.
             </div>
           )}
 

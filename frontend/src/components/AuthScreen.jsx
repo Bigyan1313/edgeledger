@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useAuth } from '../auth/AuthContext.jsx'
+import { useAuth } from '../auth/useAuth.js'
 import GoogleButton from './GoogleButton.jsx'
 
 export default function AuthScreen() {

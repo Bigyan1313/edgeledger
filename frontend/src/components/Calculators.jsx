@@ -13,21 +13,21 @@ const INSTRUMENT_DPP = {
   USDCAD: 7.3,
 }
 
-export default function Calculators() {
+export default function Calculators({ defaultRiskPercent }) {
   return (
     <div className="space-y-8 max-w-3xl mx-auto">
       <h2 className="text-xl font-semibold text-bright">Calculators</h2>
       <div className="grid md:grid-cols-2 gap-6">
-        <PositionSizer />
+        <PositionSizer defaultRiskPercent={defaultRiskPercent} />
         <RiskReward />
       </div>
     </div>
   )
 }
 
-function PositionSizer() {
+function PositionSizer({ defaultRiskPercent }) {
   const [balance, setBalance]   = useState('')
-  const [riskPct, setRiskPct]   = useState('1')
+  const [riskPct, setRiskPct]   = useState(() => String(defaultRiskPercent ?? 1))
   const [slPips, setSlPips]     = useState('')
   const [instrument, setInstrument] = useState('XAUUSD')
   const [dpp, setDpp]           = useState(String(INSTRUMENT_DPP.XAUUSD))

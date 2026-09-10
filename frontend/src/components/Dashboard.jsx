@@ -182,8 +182,8 @@ function DisciplineMirror({ trades }) {
   )
 }
 
-function MirrorPair({ title, good, bad }) {
-  const Side = ({ data, tone }) => (
+function MirrorSide({ data }) {
+  return (
     <div className="flex-1">
       <div className="text-xs text-gray-500 mb-1">{data.label}</div>
       <div className={`text-lg font-bold ${data.pnl >= 0 ? 'text-gain' : 'text-loss'}`}>
@@ -194,13 +194,16 @@ function MirrorPair({ title, good, bad }) {
       </div>
     </div>
   )
+}
+
+function MirrorPair({ title, good, bad }) {
   return (
     <div className="glass rounded-[16px] p-3.5">
       <div className="text-xs font-medium text-faint mb-2">{title}</div>
       <div className="flex gap-3">
-        <Side data={good} tone="good" />
+        <MirrorSide data={good} />
         <div className="w-px bg-line" />
-        <Side data={bad} tone="bad" />
+        <MirrorSide data={bad} />
       </div>
     </div>
   )

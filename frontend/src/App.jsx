@@ -3,7 +3,7 @@ import { Download } from 'lucide-react'
 import { tradesApi } from './api/trades.js'
 import { accountsApi } from './api/accounts.js'
 import { profileApi } from './api/profile.js'
-import { useAuth } from './auth/AuthContext.jsx'
+import { useAuth } from './auth/useAuth.js'
 import Nav from './components/Nav.jsx'
 import TradeForm from './components/TradeForm.jsx'
 import CloseTradeForm from './components/CloseTradeForm.jsx'
@@ -49,11 +49,15 @@ export default function App() {
   // place instead of blanking the app.
   useEffect(() => {
     if (!user) return
-    setError(null)
+    let cancelled = false
     Promise.all([tradesApi.list({ includeLegacy }), accountsApi.list(), profileApi.get()])
-      .then(([t, a, p]) => { setTrades(t); setAccounts(a); setProfile(p) })
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false))
+      .then(([t, a, p]) => {
+        if (cancelled) return
+        setTrades(t); setAccounts(a); setProfile(p); setError(null)
+      })
+      .catch(err => { if (!cancelled) setError(err.message) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [user, includeLegacy])
 
   // Create an account, add it to state, and return it (so the form can select it).
@@ -129,7 +133,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-ink text-bright">
-      <Nav active={tab} onChange={handleNavChange} user={user} onLogout={logout} openCount={openCount} />
+      <Nav active={tab} onChange={handleNavChange} user={{ ...user, displayName: profile?.displayName ?? user.displayName }} onLogout={logout} openCount={openCount} />
 
       {/* The v2 trade table carries more columns than v1 did — broker linkage,
           both setup axes, stage, flags — so History gets a wider column than the
@@ -155,6 +159,7 @@ export default function App() {
                 />
               ) : (
                 <TradeForm
+                  key={amendingTrade?.id ?? 'new'}
                   amendTrade={amendingTrade}
                   accounts={accounts}
                   onAddAccount={handleAddAccount}
@@ -211,7 +216,7 @@ export default function App() {
               </div>
             )}
 
-            {tab === 'calc' && <Calculators />}
+            {tab === 'calc' && <Calculators defaultRiskPercent={profile?.defaultRiskPercent} />}
 
             {tab === 'profile' && <Profile onSaved={setProfile} />}
           </>

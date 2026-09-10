@@ -47,6 +47,7 @@ git push -u origin main
    - `DATABASE_URL` = your Neon connection string
    - `JWT_SECRET` = a FRESH long random string (generate a new one, don't reuse local)
    - `GOOGLE_CLIENT_ID` = your Google client id
+   - `ANTHROPIC_API_KEY` = your server-only Anthropic key (required for the Edge assistant and screenshot import)
    - (we'll add `FRONTEND_ORIGIN` in step 4, once we know the Vercel URL)
 5. Create the service. Wait for the build. Note the URL, e.g. `https://edgeledger-api.onrender.com`.
 6. Sanity check: visit `https://<your-render-url>/api/health` — should return `{"status":"ok",...}`.

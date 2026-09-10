@@ -30,7 +30,12 @@ export default function GoogleButton({ onCredential, onError }) {
   const ref = useRef(null)
   // Keep the latest callback without re-initializing the button each render.
   const cbRef = useRef(onCredential)
-  cbRef.current = onCredential
+  const errorRef = useRef(onError)
+
+  useEffect(() => {
+    cbRef.current = onCredential
+    errorRef.current = onError
+  }, [onCredential, onError])
 
   useEffect(() => {
     if (!CONFIGURED) return
@@ -52,7 +57,9 @@ export default function GoogleButton({ onCredential, onError }) {
           shape: 'pill',
         })
       })
-      .catch(() => onError?.('Could not load Google sign-in'))
+      .catch(() => {
+        if (!cancelled) errorRef.current?.('Could not load Google sign-in')
+      })
 
     return () => { cancelled = true }
   }, [])

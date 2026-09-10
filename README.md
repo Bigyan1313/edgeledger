@@ -18,6 +18,8 @@ A personal **trading journal + performance analytics** web app for discretionary
 - Validated risk fields: stop, entry, and lot size required, with the stop checked against the direction
 - Trade history table with data-quality flags and a toggle for legacy v1 rows
 - CSV export built for a downstream analysis pipeline (snake_case, UTC offsets, real booleans)
+- Broker screenshot import — reads an image into a draft for review before saving; requires `ANTHROPIC_API_KEY`
+- Trader profile — display name, journal timezone, broker defaults, and calculator risk percentage
 
 **Analytics dashboard**
 - Net P&L, win rate, profit factor, expectancy per trade, average R
@@ -117,6 +119,7 @@ Open http://localhost:5173.
 | `DATABASE_URL` | Postgres connection string |
 | `JWT_SECRET` | Long random string for signing tokens |
 | `GOOGLE_CLIENT_ID` | Google OAuth client id (public) |
+| `ANTHROPIC_API_KEY` | Server-only key for the Edge assistant and screenshot import |
 | `FRONTEND_ORIGIN` | (prod) allowed CORS origin |
 
 **`frontend/.env`**
@@ -175,6 +178,32 @@ edgeledger/
 ## Deployment
 
 See [`DEPLOY.md`](DEPLOY.md) for the full Neon → Render → Vercel walkthrough.
+
+The backend build generates the Prisma client and runs `prisma migrate deploy`,
+including the profile migration. Deploy the backend before using the new profile
+screen. Local databases also need the committed migrations applied.
+
+### Checks before pushing
+
+```bash
+npm --prefix frontend test
+npm --prefix frontend run lint
+npm --prefix frontend run build
+npm --prefix backend test
+```
+
+Backend API suites require a disposable PostgreSQL database; without
+`TEST_DATABASE_URL`, they are skipped. Set and export `TEST_DATABASE_URL` to that
+database, apply migrations, then run the full backend suite:
+
+```bash
+cd backend
+DATABASE_URL="$TEST_DATABASE_URL" npx prisma migrate deploy
+npx prisma generate
+npm test
+```
+
+The screenshot route tests use a model stub and do not make paid API calls.
 
 ---
 

@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useMemo, useState } from 'react'
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, ImageUp, X } from 'lucide-react'
 import { tradesApi } from '../api/trades.js'
 import AccountSelector from './AccountSelector.jsx'
 import { fileToCompressedDataUrl } from '../utils/image.js'
+import { isoToZonedInput, possibleInstantsForLocal, zonedInputToIso } from '../utils/datetime.js'
+import { applyExtractedFields, notesForImport } from '../utils/extraction.js'
 import ScreenshotImport from './ScreenshotImport.jsx'
 import {
   BROKER_PLATFORMS,
@@ -16,13 +18,6 @@ import {
 
 const MAX_SCREENSHOTS = 5 // intentionally not surfaced in the UI
 
-// datetime-local inputs need "YYYY-MM-DDTHH:mm" in LOCAL time, not ISO/UTC.
-function isoToLocalInput(iso) {
-  const d = new Date(iso)
-  const pad = n => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
 // Task 3 + Task 4: nothing here is pre-selected. An empty string is "not
 // answered yet", and the server rejects it — which is the point. A default
 // would come back as data indistinguishable from an observation, which is how
@@ -35,6 +30,8 @@ const EMPTY = {
   pair: '',
   direction: 'long',
   entryTimeUtc: '',
+  entryInstant: null,
+  journaledAfterOutcome: false,
   entryPrice: '',
   stopLoss: '',
   takeProfit: '',
@@ -61,7 +58,7 @@ function emptyFormFor(profile) {
 }
 
 // Turn a saved trade into form state (strings, local datetime) for amending.
-function tradeToForm(t) {
+function tradeToForm(t, timezone) {
   return {
     accountId: t.accountId ?? null,
     brokerPositionId: t.brokerPositionId ?? '',
@@ -69,7 +66,8 @@ function tradeToForm(t) {
     brokerPlatform: t.brokerPlatform ?? 'cTrader',
     pair: t.pair ?? '',
     direction: t.direction ?? 'long',
-    entryTimeUtc: t.entryTimeUtc ? isoToLocalInput(t.entryTimeUtc) : '',
+    entryTimeUtc: t.entryTimeUtc ? isoToZonedInput(t.entryTimeUtc, timezone) : '',
+    entryInstant: t.entryTimeUtc ?? null,
     entryPrice: t.entryPrice ?? '',
     stopLoss: t.stopLoss ?? '',
     takeProfit: t.takeProfit ?? '',
@@ -99,27 +97,22 @@ const bool = (v) => (v === '' ? null : v === 'true')
 
 export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onCreated, onAmended, onCancelAmend, profile = null }) {
   const isAmending = Boolean(amendTrade)
-  const [form, setForm] = useState(amendTrade ? tradeToForm(amendTrade) : emptyFormFor(profile))
+  const [timezone] = useState(() => amendTrade?.captureTimezone || profile?.timezone || detectTimezone())
+  const [form, setForm] = useState(() => amendTrade ? tradeToForm(amendTrade, timezone) : emptyFormFor(profile))
   const [reason, setReason] = useState('')
-  const [timezone, setTimezone] = useState(detectTimezone())
   const [saving, setSaving] = useState(false)
   const [processingImg, setProcessingImg] = useState(false)
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState(null)
   const [fieldErrors, setFieldErrors] = useState({})
 
-  useEffect(() => {
-    setForm(amendTrade ? tradeToForm(amendTrade) : emptyFormFor(profile))
-    // The journal timezone is the trader's stated one if they pinned it, and the
-    // browser's only as a fallback.
-    setTimezone(amendTrade?.captureTimezone || profile?.timezone || detectTimezone())
-    setReason('')
-    setError(null)
-    setFieldErrors({})
-  }, [amendTrade, profile])
+  const entryChoices = useMemo(() => {
+    if (!form.entryTimeUtc) return []
+    try { return possibleInstantsForLocal(form.entryTimeUtc, timezone) } catch { return [] }
+  }, [form.entryTimeUtc, timezone])
 
   const set = (field, value) => {
-    setForm(f => ({ ...f, [field]: value }))
+    setForm(f => ({ ...f, [field]: value, ...(field === 'entryTimeUtc' ? { entryInstant: null } : {}) }))
     setFieldErrors(prev => {
       if (!prev[field]) return prev
       const next = { ...prev }
@@ -155,27 +148,15 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
   // Apply an extraction to the form. Null fields are skipped rather than
   // written, so an import never wipes something the user already typed.
   const applyExtraction = (fields) => {
-    const toLocal = (iso) => (iso ? isoToLocalInput(iso) : '')
-    setForm(f => {
-      const next = { ...f }
-      const put = (key, value) => { if (value !== null && value !== undefined) next[key] = value }
-      put('brokerPositionId', fields.brokerPositionId)
-      put('brokerAccountId', fields.brokerAccountId)
-      put('brokerPlatform', fields.brokerPlatform)
-      put('pair', fields.pair)
-      put('direction', fields.direction)
-      if (fields.entryTimeUtc) next.entryTimeUtc = toLocal(fields.entryTimeUtc)
-      put('entryPrice', fields.entryPrice)
-      put('stopLoss', fields.stopLoss)
-      put('takeProfit', fields.takeProfit)
-      put('lotSize', fields.lotSize)
-      return next
-    })
+    setForm(f => applyExtractedFields(f, fields, timezone))
     setFieldErrors({})
     setImporting(false)
   }
 
-  const stampNow = () => set('entryTimeUtc', isoToLocalInput(new Date().toISOString()))
+  const stampNow = () => {
+    const instant = new Date().toISOString()
+    setForm(f => ({ ...f, entryTimeUtc: isoToZonedInput(instant, timezone), entryInstant: instant }))
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -190,9 +171,7 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
         brokerPlatform: form.brokerPlatform,
         pair: form.pair,
         direction: form.direction,
-        // The input is local wall-clock time; this is where it becomes an
-        // unambiguous instant. captureTimezone records which wall clock it was.
-        entryTimeUtc: form.entryTimeUtc ? new Date(form.entryTimeUtc).toISOString() : null,
+        entryTimeUtc: form.entryTimeUtc ? zonedInputToIso(form.entryTimeUtc, timezone, form.entryInstant) : null,
         captureTimezone: timezone,
         entryPrice: num(form.entryPrice),
         stopLoss: num(form.stopLoss),
@@ -202,7 +181,7 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
         emotionalState: form.emotionalState,
         followedChecklist: bool(form.followedChecklist),
         fullPort: bool(form.fullPort),
-        notes: form.notes,
+        notes: notesForImport(form.notes, form.journaledAfterOutcome),
         setupNotes: form.setupNotes.trim() || null,
         screenshots: form.screenshots,
       }
@@ -332,7 +311,7 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
         <Field label="Entry Time" required error={fieldErrors.entryTimeUtc}
           hint={timezone}>
           <div className="flex gap-1 min-w-0">
-            <input type="datetime-local" required value={form.entryTimeUtc}
+            <input type="datetime-local" step="any" required value={form.entryTimeUtc}
               onChange={e => set('entryTimeUtc', e.target.value)}
               className={`${inputCls(fieldErrors.entryTimeUtc)} min-w-0`} />
             <button type="button" onClick={stampNow} title="Stamp the current time"
@@ -340,6 +319,15 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
               Now
             </button>
           </div>
+          {entryChoices.length > 1 && (
+            <select aria-label="Entry time occurrence" required value={form.entryInstant ? new Date(form.entryInstant).toISOString() : ''}
+              onChange={e => set('entryInstant', e.target.value)} className={inputCls(fieldErrors.entryTimeUtc)}>
+              <option value="">Repeated time — choose occurrence</option>
+              {entryChoices.map((instant, index) => (
+                <option key={instant} value={instant}>{index === 0 ? 'First' : 'Second'} ({instant.slice(11, 19)} UTC)</option>
+              ))}
+            </select>
+          )}
         </Field>
         <Field label="Direction" required>
           <div className="flex gap-2 pt-1">

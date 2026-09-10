@@ -12,6 +12,9 @@ const apiKey = process.env.ANTHROPIC_API_KEY
 const configured = Boolean(apiKey) && !apiKey.startsWith('PASTE_')
 const defaultClient = configured ? new Anthropic({ apiKey }) : null
 
+// The duplicate lookup can reject too; Express 4 must pass it to middleware.
+const handle = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
+
 // The Anthropic client is a parameter rather than a module-level singleton so
 // the route's own behaviour — the image checks, the guards, duplicate
 // detection, and the promise that nothing is ever created — can be tested
@@ -26,7 +29,7 @@ export function createExtractRouter({ client = defaultClient } = {}) {
   // model's reading of an image would put unverified numbers into the journal —
   // the exact failure schema v2 exists to prevent — and it would do it
   // invisibly, because a plausible wrong price looks just like a right one.
-  router.post('/extract', async (req, res) => {
+  router.post('/extract', handle(async (req, res) => {
     if (!client) {
       return res.status(503).json({
         error: 'Screenshot import is not configured on this server (missing ANTHROPIC_API_KEY).',
@@ -88,7 +91,7 @@ export function createExtractRouter({ client = defaultClient } = {}) {
       journaledAfterOutcome: fields.isClosed === true,
       usage: usage ? { inputTokens: usage.input_tokens, outputTokens: usage.output_tokens } : null,
     })
-  })
+  }))
 
   return router
 }

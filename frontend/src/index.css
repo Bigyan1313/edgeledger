@@ -1,22 +1,88 @@
 @import "tailwindcss";
+/* Inter — the closest free face to the reference's SF Pro, and the one shadcn
+   ships with. Self-hosted so it renders identically offline and in production
+   rather than depending on a CDN. */
+@import "@fontsource-variable/inter";
 
-/* EdgeLedger dark palette — referenced as bg-ink, bg-surface, border-line, text-muted, etc. */
+/* ---------------------------------------------------------------------------
+   Palette, read from the reference card.
+
+   The reference sets a near-black card on a light page. EdgeLedger stays dark —
+   a trading journal is read for long stretches, and the request asked for
+   *darker* borders and more transparency, which only mean anything on a dark
+   ground. So the card's black becomes the surface, its violet becomes the
+   accent, and the page sits a shade below the card so panels lift off it.
+   --------------------------------------------------------------------------- */
 @theme {
-  --color-ink: #0b0e14;        /* page background */
-  --color-surface: #141a23;    /* card background */
-  --color-surface-2: #11161f;  /* nested/inner surface */
-  --color-line: #1e2733;       /* card borders */
-  --color-line-soft: #161d27;  /* subtle dividers */
-  --color-muted: #7e8796;      /* muted labels */
-  --color-faint: #aeb6c4;      /* secondary text */
+  /* Greys — the reference card is a warm near-black, not a blue-black. */
+  --color-ink: #0d0d0f;         /* page background, one step under the card */
+  --color-surface: #17171a;     /* card body — the reference's card black */
+  --color-surface-2: #1f1f24;   /* nested panels, inputs */
+  --color-surface-3: #26262c;   /* hover / raised */
+
+  /* Borders. Darker than the surface so edges read as depth rather than as
+     drawn lines — the "contrasting darker borders that blend" the brief asked
+     for. */
+  --color-line: #000000;
+  --color-line-soft: #232329;
+
+  /* Type */
+  --color-muted: #7c7c86;       /* labels, the reference's dimmed decimals */
+  --color-faint: #a8a8b3;       /* secondary text */
+  --color-bright: #f5f5f7;      /* primary text */
+
+  /* Accent — the reference's two stacked cards. */
+  --color-violet: #5a54e8;      /* the vivid indigo card */
+  --color-violet-soft: #b9a6f5; /* the lavender card beneath it */
+  --color-violet-deep: #4c2fa8; /* the deep purple text on lavender */
+
+  /* Status — the reference's "Active" pill, and its mirror for losses. */
+  --color-gain: #34c759;
+  --color-gain-bg: #0b2e1c;
+  --color-loss: #ff453a;
+  --color-loss-bg: #33110f;
+  --color-warn: #ffb340;
+  --color-warn-bg: #33260d;
+
+  /* Radii — the reference is generously rounded: ~32px outer, ~20px inner. */
+  --radius-card: 24px;
+  --radius-inner: 16px;
 }
 
 body {
   margin: 0;
-  background: #0b0e14;
-  color: #e6e9ef;
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  background: var(--color-ink);
+  color: var(--color-bright);
+  font-family: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* The reference's numerals are even-width and lightly tightened. */
+  font-feature-settings: 'cv11', 'ss01';
+  letter-spacing: -0.011em;
+}
+
+/* Figures line up column-to-column in tables and stat tiles. */
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* The card treatment from the reference: a black edge that reads as depth, and
+   a soft violet bloom under the whole thing rather than a hard drop shadow. */
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  box-shadow:
+    0 1px 0 0 rgb(255 255 255 / 0.04) inset,
+    0 18px 40px -24px rgb(0 0 0 / 0.9),
+    0 0 48px -28px rgb(90 84 232 / 0.55);
+}
+
+/* Translucent panel. Used for the calendar cells so the page shows through and
+   the grid reads as glass sitting on the surface instead of paint applied to
+   it. */
+.glass {
+  background: rgb(31 31 36 / 0.55);
+  border: 1px solid rgb(0 0 0 / 0.55);
+  backdrop-filter: blur(10px);
 }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }

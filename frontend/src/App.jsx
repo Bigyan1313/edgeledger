@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Download } from 'lucide-react'
 import { tradesApi } from './api/trades.js'
 import { accountsApi } from './api/accounts.js'
 import { profileApi } from './api/profile.js'
@@ -127,7 +128,7 @@ export default function App() {
   const stageBTrade = closingTrade ?? reviewingTrade
 
   return (
-    <div className="min-h-screen bg-ink text-gray-100">
+    <div className="min-h-screen bg-ink text-bright">
       <Nav active={tab} onChange={handleNavChange} user={user} onLogout={logout} openCount={openCount} />
 
       {/* The v2 trade table carries more columns than v1 did — broker linkage,
@@ -135,14 +136,14 @@ export default function App() {
           rest of the app rather than scrolling its actions off the edge. */}
       <main className={`${tab === 'history' ? 'max-w-7xl' : 'max-w-5xl'} mx-auto px-6 py-8`}>
         {error && (
-          <div className="bg-red-950 border border-red-700 rounded-lg px-4 py-3 text-red-300 text-sm">
+          <div className="rounded-xl border border-loss/40 bg-loss-bg/80 px-4 py-3 text-loss/90 text-sm">
             {error}
           </div>
         )}
 
         {!error && (
           <>
-            {tab === 'dashboard' && <Dashboard trades={trades} />}
+            {tab === 'dashboard' && <Dashboard trades={trades} accounts={accounts} />}
 
             {tab === 'log' && (
               stageBTrade ? (
@@ -168,14 +169,14 @@ export default function App() {
             {tab === 'history' && (
               <div>
                 <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
-                  <h2 className="text-xl font-semibold text-white">Trade History</h2>
+                  <h2 className="text-xl font-semibold text-bright tracking-tight">Trade History</h2>
                   <div className="flex items-center gap-4">
                     <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-400">
                       <input
                         type="checkbox"
                         checked={includeLegacy}
                         onChange={e => setIncludeLegacy(e.target.checked)}
-                        className="w-4 h-4 rounded accent-amber-400"
+                        className="w-4 h-4 rounded accent-violet"
                       />
                       <span title="v1 rows have no broker position ID and cannot be joined to execution data.">
                         Include v1 rows
@@ -184,15 +185,15 @@ export default function App() {
                     <button
                       onClick={() => downloadCsv(trades, { includeLegacy })}
                       disabled={exportableCount === 0}
-                      className="text-sm px-3 py-1.5 border border-gray-700 rounded-lg text-gray-300 hover:border-gray-500 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      className="text-sm px-3.5 py-2 border border-line bg-surface-2 rounded-xl text-faint hover:bg-surface-3 hover:text-bright disabled:opacity-40 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-1.5"
                     >
-                      ↓ Export CSV ({exportableCount})
+                      <Download size={14} strokeWidth={2} />Export CSV ({exportableCount})
                     </button>
                   </div>
                 </div>
 
                 {includeLegacy && (
-                  <div className="bg-amber-950/40 border border-amber-800/50 rounded-lg px-4 py-3 text-amber-300/90 text-sm mb-4">
+                  <div className="rounded-xl border border-warn/30 bg-warn-bg/60 px-4 py-3 text-warn/90 text-sm mb-4">
                     Showing v1 rows. They have no broker position ID, so they cannot be matched to
                     execution data — they are kept as a record, not as analysable data, and the
                     export marks them <code className="text-amber-200">schema_version=1</code>.

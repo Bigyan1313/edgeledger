@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ImageUp } from 'lucide-react'
 import { tradesApi } from '../api/trades.js'
 import { fileToCompressedDataUrl } from '../utils/image.js'
 
@@ -61,10 +62,10 @@ export default function ScreenshotImport({ onApply, onDismiss }) {
   const missing = result ? Object.entries(FIELD_LABELS).filter(([f]) => result.fields[f] == null) : []
 
   return (
-    <div className="bg-surface border border-line rounded-xl p-4 space-y-4">
+    <div className="card p-5 space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-white">Import from a screenshot</h3>
+          <h3 className="text-sm font-semibold text-bright">Import from a screenshot</h3>
           <p className="text-xs text-muted mt-1">
             Drop in your platform's position or history panel. Everything read is filled into the
             form below for you to check — nothing is saved until you save it.
@@ -78,16 +79,16 @@ export default function ScreenshotImport({ onApply, onDismiss }) {
 
       {!result && (
         <label className={`block rounded-lg border-2 border-dashed px-4 py-8 text-center cursor-pointer transition-colors ${
-          busy ? 'border-gray-700 text-gray-600' : 'border-gray-700 hover:border-emerald-500 text-gray-500 hover:text-emerald-400'
+          busy ? 'border-line-soft text-muted' : 'border-line-soft hover:border-violet-soft/60 text-muted hover:text-violet-soft'
         }`}>
           <input type="file" accept="image/*" className="hidden" disabled={busy}
             onChange={e => { handleFile(e.target.files?.[0]); e.target.value = '' }} />
-          {busy ? 'Reading the screenshot…' : <><span className="text-2xl leading-none block mb-1">⇪</span><span className="text-xs">Choose a screenshot</span></>}
+          {busy ? 'Reading the screenshot…' : <><ImageUp size={22} strokeWidth={1.75} className="mx-auto mb-1.5" /><span className="text-xs">Choose a screenshot</span></>}
         </label>
       )}
 
       {error && (
-        <div className="bg-red-950 border border-red-700 rounded-lg px-4 py-3 text-red-300 text-sm">
+        <div className="rounded-xl border border-loss/40 bg-loss-bg/80 px-4 py-3 text-loss/90 text-sm">
           {error}
         </div>
       )}
@@ -110,7 +111,7 @@ export default function ScreenshotImport({ onApply, onDismiss }) {
           </div>
 
           {result.journaledAfterOutcome && (
-            <div className="bg-amber-950/50 border border-amber-800/60 rounded-lg px-3 py-2 text-amber-300/90 text-xs">
+            <div className="rounded-xl border border-warn/30 bg-warn-bg/60 px-3 py-2.5 text-warn/90 text-xs">
               This screenshot shows a <strong>closed</strong> trade, so the entry is being written after
               the result was known. It will be saved with a <code>retroactive_journal</code> flag — that
               is accurate, not a problem, but it means the recorded intent is not contemporaneous.
@@ -120,7 +121,7 @@ export default function ScreenshotImport({ onApply, onDismiss }) {
           {result.warnings.length > 0 && (
             <ul className="space-y-1">
               {result.warnings.map((w, i) => (
-                <li key={i} className="text-xs text-amber-400/90">
+                <li key={i} className="text-xs text-warn/90">
                   <strong>{FIELD_LABELS[w.field] ?? w.field}:</strong> {w.message}
                 </li>
               ))}
@@ -149,11 +150,11 @@ export default function ScreenshotImport({ onApply, onDismiss }) {
 
           <div className="flex gap-2">
             <button type="button" onClick={() => onApply(result.fields)}
-              className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-400 text-black text-sm font-semibold rounded-lg transition-colors">
+              className="flex-1 py-2 bg-violet hover:brightness-110 text-white text-sm font-semibold rounded-xl transition-colors">
               Fill the form with these
             </button>
             <button type="button" onClick={() => { setResult(null); setPreview(null) }}
-              className="px-4 py-2 border border-gray-700 text-gray-300 text-sm rounded-lg hover:border-gray-500 transition-colors">
+              className="px-4 py-2 border border-line bg-surface-2 text-faint text-sm rounded-xl hover:bg-surface-3 transition-colors">
               Try another
             </button>
           </div>

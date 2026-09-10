@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, ImageUp, X } from 'lucide-react'
 import { tradesApi } from '../api/trades.js'
 import AccountSelector from './AccountSelector.jsx'
 import { fileToCompressedDataUrl } from '../utils/image.js'
@@ -230,7 +231,7 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
     <form onSubmit={handleSubmit} className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold text-white">
+          <h2 className="text-xl font-semibold text-bright tracking-tight">
             {isAmending ? `Amend Trade #${amendTrade.id}` : 'Log Trade — before you enter'}
           </h2>
           {!isAmending && (
@@ -260,14 +261,14 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
           <ScreenshotImport onApply={applyExtraction} onDismiss={() => setImporting(false)} />
         ) : (
           <button type="button" onClick={() => setImporting(true)}
-            className="w-full py-2.5 border border-dashed border-gray-700 rounded-lg text-sm text-gray-400 hover:border-emerald-600 hover:text-emerald-400 transition-colors">
-            ⇪ Import from a screenshot instead of typing
+            className="w-full py-2.5 border border-dashed border-line-soft rounded-xl text-sm text-faint hover:border-violet-soft/60 hover:text-violet-soft bg-surface-2/40 transition-colors">
+            <span className="inline-flex items-center gap-2"><ImageUp size={15} strokeWidth={2} />Import from a screenshot instead of typing</span>
           </button>
         )
       )}
 
       {isAmending && (
-        <div className="bg-amber-950/60 border border-amber-700/60 rounded-lg px-4 py-3 text-amber-300 text-sm space-y-2">
+        <div className="rounded-xl border border-warn/35 bg-warn-bg/70 px-4 py-3 text-warn/90 text-sm space-y-2">
           <p>
             <strong>This is an amendment.</strong> These fields locked when the pre-trade entry was
             saved. Every change is recorded with its original value, and the trade is permanently
@@ -277,8 +278,8 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
       )}
 
       {(setupWarning || stateWarning) && (
-        <div className="bg-red-950 border border-red-700 rounded-lg px-4 py-3 text-red-300 text-sm flex items-start gap-2">
-          <span className="text-red-400">⚠</span>
+        <div className="rounded-xl border border-loss/40 bg-loss-bg/80 px-4 py-3 text-loss/90 text-sm flex items-start gap-2">
+          <AlertTriangle size={16} strokeWidth={2} className="text-loss mt-0.5 shrink-0" />
           <span>
             {stateWarning && <><strong>{form.emotionalState}.</strong> Logging it is the right call — taking it may not be. </>}
             {setupWarning && <><strong>{form.technicalSetup}.</strong> No confirmed structure behind this one.</>}
@@ -287,7 +288,7 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
       )}
 
       {error && (
-        <div className="bg-red-950 border border-red-700 rounded-lg px-4 py-3 text-red-300 text-sm">
+        <div className="rounded-xl border border-loss/40 bg-loss-bg/80 px-4 py-3 text-loss/90 text-sm">
           {error}
         </div>
       )}
@@ -344,14 +345,14 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
           <div className="flex gap-2 pt-1">
             {['long', 'short'].map(dir => (
               <button key={dir} type="button" onClick={() => set('direction', dir)}
-                className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-colors ${
                   form.direction === dir
                     ? dir === 'long'
-                      ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400'
-                      : 'bg-red-500/20 border-red-500 text-red-400'
-                    : 'border-gray-700 text-gray-400 hover:border-gray-500'
+                      ? 'bg-gain-bg border-gain/60 text-gain'
+                      : 'bg-loss-bg border-loss/60 text-loss'
+                    : 'border-line bg-surface-2 text-muted hover:bg-surface-3 hover:text-faint'
                 }`}>
-                {dir === 'long' ? '▲ Long' : '▼ Short'}
+                <span className="inline-flex items-center justify-center gap-1">{dir === 'long' ? <ArrowUpRight size={14} strokeWidth={2.5} /> : <ArrowDownRight size={14} strokeWidth={2.5} />}{dir === 'long' ? 'Long' : 'Short'}</span>
               </button>
             ))}
           </div>
@@ -364,7 +365,7 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
           <span className="text-sm font-medium text-gray-300">Levels &amp; size</span>
           {rr && (
             <span className="text-xs text-gray-400">
-              Planned R:R <span className="text-emerald-400 font-semibold">{rr}R</span>
+              Planned R:R <span className="text-gain font-semibold">{rr}R</span>
             </span>
           )}
         </div>
@@ -444,12 +445,12 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
                 aria-label="Remove screenshot"
                 className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/70 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
               >
-                ✕
+                <X size={12} strokeWidth={2.5} />
               </button>
             </div>
           ))}
           {form.screenshots.length < MAX_SCREENSHOTS && (
-            <label className="aspect-video rounded-lg border-2 border-dashed border-gray-700 hover:border-emerald-500 cursor-pointer flex flex-col items-center justify-center text-gray-500 hover:text-emerald-400 transition-colors">
+            <label className="aspect-video rounded-lg border-2 border-dashed border-line-soft hover:border-violet-soft/60 cursor-pointer flex flex-col items-center justify-center text-muted hover:text-violet-soft transition-colors">
               <input
                 type="file"
                 accept="image/*"
@@ -479,7 +480,7 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
       )}
 
       <button type="submit" disabled={saving}
-        className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-semibold rounded-lg transition-colors">
+        className="w-full py-3 bg-violet hover:brightness-110 disabled:opacity-50 text-white font-semibold rounded-xl shadow-[0_10px_30px_-12px_rgb(90_84_232/0.85)] transition-colors">
         {saving ? 'Saving…' : isAmending ? 'Record Amendment' : 'Save Pre-Trade Entry'}
       </button>
 
@@ -499,16 +500,16 @@ function YesNo({ label, value, onChange, error, tone = 'normal' }) {
   const options = [['true', 'Yes'], ['false', 'No']]
   const activeCls = (v) =>
     tone === 'danger' && v === 'true'
-      ? 'bg-red-500/20 border-red-500 text-red-400'
-      : 'bg-emerald-500/20 border-emerald-500 text-emerald-400'
+      ? 'bg-loss-bg border-loss/60 text-loss'
+      : 'bg-gain-bg border-gain/60 text-gain'
 
   return (
     <Field label={label} required error={error}>
       <div className="flex gap-2 pt-1">
         {options.map(([v, text]) => (
           <button key={v} type="button" onClick={() => onChange(v)}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
-              value === v ? activeCls(v) : 'border-gray-700 text-gray-400 hover:border-gray-500'
+            className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-colors ${
+              value === v ? activeCls(v) : 'border-line bg-surface-2 text-muted hover:bg-surface-3 hover:text-faint'
             }`}>
             {text}
           </button>
@@ -531,6 +532,6 @@ function Field({ label, required, hint, error, children }) {
   )
 }
 
-const baseInput = 'bg-gray-800 border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none w-full'
+const baseInput = 'bg-surface-2 border rounded-xl px-3 py-2.5 text-sm text-bright placeholder:text-muted/70 focus:outline-none w-full transition-colors'
 const inputCls = (error) =>
-  `${baseInput} ${error ? 'border-red-600 focus:border-red-500' : 'border-gray-700 focus:border-emerald-500'}`
+  `${baseInput} ${error ? 'border-loss/70 focus:border-loss' : 'border-line focus:border-violet-soft/70'}`

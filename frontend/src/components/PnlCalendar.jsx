@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -55,10 +56,13 @@ export default function PnlCalendar({ trades }) {
     else if (day.pnl < 0) redDays++
   }
 
+  // Colour is carried as translucent light over the glass cell rather than as a
+  // painted swatch, so the page reads through and the heaviest days still stand
+  // out by intensity alone.
   const tint = (pnl) => {
-    if (pnl === 0) return 'rgba(148,163,184,0.06)'        // break-even day: faint neutral
-    const a = maxAbs ? 0.10 + 0.26 * Math.min(1, Math.abs(pnl) / maxAbs) : 0.16
-    return pnl > 0 ? `rgba(52,211,153,${a})` : `rgba(248,113,113,${a})`
+    if (pnl === 0) return 'rgb(124 124 134 / 0.10)'
+    const a = maxAbs ? 0.10 + 0.20 * Math.min(1, Math.abs(pnl) / maxAbs) : 0.15
+    return pnl > 0 ? `rgb(52 199 89 / ${a})` : `rgb(255 69 58 / ${a})`
   }
 
   const go = (delta) => setView(v => {
@@ -69,26 +73,33 @@ export default function PnlCalendar({ trades }) {
   const monthLabel = first.toLocaleString('default', { month: 'long', year: 'numeric' })
   const money = n => `${n >= 0 ? '+' : '−'}$${Math.abs(n).toFixed(0)}`
 
-  const navBtn = 'w-6 h-6 flex items-center justify-center rounded-md bg-surface-2 border border-line text-faint hover:text-white hover:border-gray-600 transition-colors'
+  const navBtn = 'w-7 h-7 flex items-center justify-center rounded-lg bg-surface-2 border border-line text-faint hover:text-bright hover:bg-surface-3 transition-colors'
 
   return (
-    <div className="bg-surface border border-line rounded-xl p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-[11px] text-muted">P&L Calendar</div>
-        <div className="flex items-center gap-2.5">
-          <button type="button" onClick={() => go(-1)} className={navBtn} aria-label="Previous month">‹</button>
-          <span className="text-xs text-gray-200 w-28 text-center">{monthLabel}</span>
-          <button type="button" onClick={() => go(1)} className={navBtn} aria-label="Next month">›</button>
+    <div className="card p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2 text-[11px] text-muted uppercase tracking-wider">
+          <CalendarDays size={13} strokeWidth={2} className="text-violet-soft" />
+          P&L Calendar
+        </div>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => go(-1)} className={navBtn} aria-label="Previous month">
+            <ChevronLeft size={15} strokeWidth={2.25} />
+          </button>
+          <span className="text-xs text-faint w-32 text-center tnum">{monthLabel}</span>
+          <button type="button" onClick={() => go(1)} className={navBtn} aria-label="Next month">
+            <ChevronRight size={15} strokeWidth={2.25} />
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-7 gap-1 mb-1">
+      <div className="grid grid-cols-7 gap-1.5 mb-1.5">
         {WEEKDAYS.map(w => (
-          <div key={w} className="text-[10px] text-muted text-center py-1">{w}</div>
+          <div key={w} className="text-[10px] text-muted text-center py-1 uppercase tracking-wide">{w}</div>
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-1">
+      <div className="grid grid-cols-7 gap-1.5">
         {cells.map((d, i) => {
           if (d === null) return <div key={i} />
           const day = byDay[dayKey(year, month, d)]
@@ -97,16 +108,20 @@ export default function PnlCalendar({ trades }) {
           return (
             <div
               key={i}
-              style={{ background: day ? tint(day.pnl) : 'transparent' }}
-              className={`rounded-lg p-1.5 min-h-[60px] flex flex-col ${day ? '' : 'border border-line/40'}`}
+              style={day ? { backgroundColor: tint(day.pnl) } : undefined}
+              className={`rounded-[14px] p-2 min-h-[68px] flex flex-col transition-colors ${
+                day
+                  ? 'border border-black/70 backdrop-blur-[8px] shadow-[inset_0_1px_0_0_rgb(255_255_255/0.06)]'
+                  : 'border border-line-soft/60 bg-surface-2/25'
+              }`}
             >
-              <div className="text-[10px] text-muted leading-none">{d}</div>
+              <div className="text-[10px] text-muted leading-none tnum">{d}</div>
               {day && (
                 <div className="mt-auto">
-                  <div className={`text-xs font-semibold leading-tight ${day.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  <div className={`text-[13px] font-semibold leading-tight tnum ${day.pnl >= 0 ? 'text-gain' : 'text-loss'}`}>
                     {money(day.pnl)}
                   </div>
-                  <div className="text-[9px] text-muted leading-tight">
+                  <div className="text-[9px] text-muted leading-tight tnum">
                     {day.count} {day.count === 1 ? 'trade' : 'trades'}{wr !== null ? ` · ${wr}%` : ''}
                   </div>
                 </div>

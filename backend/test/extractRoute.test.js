@@ -58,7 +58,6 @@ before(async () => {
       import('../src/auth/middleware.js'),
     ])
   prisma = client
-  await prisma.trade.deleteMany({})
   await prisma.user.deleteMany({ where: { email: 'extract@example.com' } })
   const user = await prisma.user.create({ data: { email: 'extract@example.com', passwordHash: 'x' } })
   userId = user.id
@@ -75,7 +74,7 @@ before(async () => {
 
 after(async () => {
   if (!TEST_DATABASE_URL) return
-  await prisma?.trade.deleteMany({})
+  // Cascade removes this user's trades; other suites' rows are left alone.
   await prisma?.user.deleteMany({ where: { email: 'extract@example.com' } })
   await prisma?.$disconnect()
   await new Promise(resolve => server?.close(resolve))

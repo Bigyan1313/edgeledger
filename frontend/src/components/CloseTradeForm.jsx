@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ArrowDownRight, ArrowUpRight } from 'lucide-react'
 import { tradesApi } from '../api/trades.js'
 
 // datetime-local inputs need "YYYY-MM-DDTHH:mm" in LOCAL time, not ISO/UTC.
@@ -76,7 +77,7 @@ export default function CloseTradeForm({ trade, mode = 'close', onClosed, onCanc
     <form onSubmit={handleSubmit} className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold text-white">
+          <h2 className="text-xl font-semibold text-bright tracking-tight">
             {isReview ? `Review Trade #${trade.id}` : `Close Trade #${trade.id}`}
           </h2>
           <p className="text-xs text-muted mt-1">
@@ -92,11 +93,11 @@ export default function CloseTradeForm({ trade, mode = 'close', onClosed, onCanc
       </div>
 
       {/* The locked plan, for reference only */}
-      <div className="bg-surface border border-line rounded-xl p-4 space-y-3">
+      <div className="card p-5 space-y-3">
         <div className="text-[11px] text-muted">What you recorded before entry</div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
           <Readout label="Symbol" value={trade.pair} />
-          <Readout label="Direction" value={trade.direction === 'long' ? '▲ Long' : '▼ Short'} />
+          <Readout label="Direction" value=<span className="inline-flex items-center gap-1">{trade.direction === 'long' ? <ArrowUpRight size={13} strokeWidth={2.5} /> : <ArrowDownRight size={13} strokeWidth={2.5} />}{trade.direction === 'long' ? 'Long' : 'Short'}</span> />
           <Readout label="Entry" value={trade.entryPrice} />
           <Readout label="Stop" value={trade.stopLoss} />
           <Readout label="Target" value={trade.takeProfit ?? '—'} />
@@ -117,7 +118,7 @@ export default function CloseTradeForm({ trade, mode = 'close', onClosed, onCanc
       </div>
 
       {error && (
-        <div className="bg-red-950 border border-red-700 rounded-lg px-4 py-3 text-red-300 text-sm">
+        <div className="rounded-xl border border-loss/40 bg-loss-bg/80 px-4 py-3 text-loss/90 text-sm">
           {error}
         </div>
       )}
@@ -140,7 +141,7 @@ export default function CloseTradeForm({ trade, mode = 'close', onClosed, onCanc
       {projectedR !== null && (
         <div className="text-sm text-gray-400">
           That is{' '}
-          <span className={`font-semibold ${parseFloat(projectedR) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+          <span className={`font-semibold ${parseFloat(projectedR) >= 0 ? 'text-gain' : 'text-loss'}`}>
             {projectedR}R
           </span>{' '}
           against ${trade.riskDollars} of risk.
@@ -154,7 +155,7 @@ export default function CloseTradeForm({ trade, mode = 'close', onClosed, onCanc
       </Field>
 
       <button type="submit" disabled={saving}
-        className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-semibold rounded-lg transition-colors">
+        className="w-full py-3 bg-violet hover:brightness-110 disabled:opacity-50 text-white font-semibold rounded-xl shadow-[0_10px_30px_-12px_rgb(90_84_232/0.85)] transition-colors">
         {saving ? 'Saving…' : isReview ? 'Save Review' : 'Close Trade'}
       </button>
     </form>
@@ -182,6 +183,6 @@ function Field({ label, required, error, children }) {
   )
 }
 
-const baseInput = 'bg-gray-800 border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none w-full'
+const baseInput = 'bg-surface-2 border rounded-xl px-3 py-2.5 text-sm text-bright placeholder:text-muted/70 focus:outline-none w-full transition-colors'
 const inputCls = (error) =>
-  `${baseInput} ${error ? 'border-red-600 focus:border-red-500' : 'border-gray-700 focus:border-emerald-500'}`
+  `${baseInput} ${error ? 'border-loss/70 focus:border-loss' : 'border-line focus:border-violet-soft/70'}`

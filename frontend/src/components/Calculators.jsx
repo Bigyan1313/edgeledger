@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ArrowUpRight, ArrowDownRight } from 'lucide-react'
 
 // Default dollars-per-pip-per-lot. Varies by instrument/broker.
 // XAUUSD ≈ $10/pip per 1.00 lot (1 pip = $0.10 move) on most brokers.
@@ -15,7 +16,7 @@ const INSTRUMENT_DPP = {
 export default function Calculators() {
   return (
     <div className="space-y-8 max-w-3xl mx-auto">
-      <h2 className="text-xl font-semibold text-white">Calculators</h2>
+      <h2 className="text-xl font-semibold text-bright">Calculators</h2>
       <div className="grid md:grid-cols-2 gap-6">
         <PositionSizer />
         <RiskReward />
@@ -103,15 +104,18 @@ function RiskReward() {
               key={d}
               type="button"
               onClick={() => setDirection(d)}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
+              className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-colors ${
                 direction === d
                   ? d === 'long'
-                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400'
-                    : 'bg-red-500/20 border-red-500 text-red-400'
-                  : 'border-gray-700 text-gray-400 hover:border-gray-500'
+                    ? 'bg-gain-bg border-gain/60 text-gain'
+                    : 'bg-loss-bg border-loss/60 text-loss'
+                  : 'border-line bg-surface-2 text-muted hover:bg-surface-3 hover:text-faint'
               }`}
             >
-              {d === 'long' ? '▲ Long' : '▼ Short'}
+              <span className="inline-flex items-center justify-center gap-1">
+                {d === 'long' ? <ArrowUpRight size={14} strokeWidth={2.5} /> : <ArrowDownRight size={14} strokeWidth={2.5} />}
+                {d === 'long' ? 'Long' : 'Short'}
+              </span>
             </button>
           ))}
         </div>
@@ -133,7 +137,7 @@ function RiskReward() {
           label="R : R"
           value={rr != null ? `${rr.toFixed(2)} : 1` : '—'}
           highlight
-          color={rr != null && rr >= 2 ? 'text-emerald-400' : rr != null && rr < 1 ? 'text-red-400' : 'text-white'}
+          color={rr != null && rr >= 2 ? 'text-gain' : rr != null && rr < 1 ? 'text-loss' : 'text-bright'}
         />
       </Results>
     </Card>
@@ -142,13 +146,13 @@ function RiskReward() {
 
 /* ---- small presentational helpers ---- */
 
-const inputCls = 'bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-emerald-500 w-full'
+const inputCls = 'bg-surface-2 border border-line rounded-xl px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-violet-soft/70 w-full'
 
 function Card({ title, subtitle, children }) {
   return (
     <div className="bg-gray-800/60 border border-gray-700/50 rounded-xl p-5 space-y-4">
       <div>
-        <h3 className="text-white font-semibold">{title}</h3>
+        <h3 className="text-bright font-semibold">{title}</h3>
         <p className="text-xs text-gray-500">{subtitle}</p>
       </div>
       {children}
@@ -182,7 +186,7 @@ function Results({ children }) {
   return <div className="border-t border-gray-700/50 pt-4 space-y-2">{children}</div>
 }
 
-function Result({ label, value, highlight, color = 'text-white' }) {
+function Result({ label, value, highlight, color = 'text-bright' }) {
   return (
     <div className="flex items-center justify-between">
       <span className="text-sm text-gray-400">{label}</span>

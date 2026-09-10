@@ -30,8 +30,6 @@ before(async () => {
   ])
   prisma = client
 
-  await prisma.tradeAmendment.deleteMany({})
-  await prisma.trade.deleteMany({})
   await prisma.user.deleteMany({ where: { email: 'apitest@example.com' } })
   const user = await prisma.user.create({
     data: { email: 'apitest@example.com', passwordHash: 'x' },
@@ -47,8 +45,6 @@ before(async () => {
 
 after(async () => {
   if (!TEST_DATABASE_URL) return
-  await prisma?.tradeAmendment.deleteMany({})
-  await prisma?.trade.deleteMany({})
   await prisma?.user.deleteMany({ where: { email: 'apitest@example.com' } })
   await prisma?.$disconnect()
   await new Promise(resolve => server?.close(resolve))

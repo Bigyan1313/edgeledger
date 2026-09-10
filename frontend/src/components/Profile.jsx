@@ -78,14 +78,14 @@ export default function Profile({ onSaved }) {
   return (
     <form onSubmit={handleSubmit} className="max-w-2xl mx-auto space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-white">Profile</h2>
+        <h2 className="text-xl font-semibold text-bright tracking-tight">Profile</h2>
         <p className="text-xs text-muted mt-1">
           {email} · everything here is optional
         </p>
       </div>
 
       {error && (
-        <div className="bg-red-950 border border-red-700 rounded-lg px-4 py-3 text-red-300 text-sm">{error}</div>
+        <div className="rounded-xl border border-loss/40 bg-loss-bg/80 px-4 py-3 text-loss/90 text-sm">{error}</div>
       )}
 
       <fieldset className="space-y-4">
@@ -147,10 +147,10 @@ export default function Profile({ onSaved }) {
 
       <div className="flex items-center gap-3">
         <button type="submit" disabled={saving}
-          className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-semibold rounded-lg transition-colors">
+          className="flex-1 py-3 bg-violet hover:brightness-110 disabled:opacity-50 text-white font-semibold rounded-xl shadow-[0_10px_30px_-12px_rgb(90_84_232/0.85)] transition-colors">
           {saving ? 'Saving…' : 'Save Profile'}
         </button>
-        {saved && <span className="text-sm text-emerald-400">Saved</span>}
+        {saved && <span className="text-sm text-gain">Saved</span>}
       </div>
     </form>
   )
@@ -169,6 +169,6 @@ function Field({ label, hint, error, children }) {
   )
 }
 
-const baseInput = 'bg-gray-800 border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none w-full'
+const baseInput = 'bg-surface-2 border rounded-xl px-3 py-2.5 text-sm text-bright placeholder:text-muted/70 focus:outline-none w-full transition-colors'
 const inputCls = (error) =>
-  `${baseInput} ${error ? 'border-red-600 focus:border-red-500' : 'border-gray-700 focus:border-emerald-500'}`
+  `${baseInput} ${error ? 'border-loss/70 focus:border-loss' : 'border-line focus:border-violet-soft/70'}`

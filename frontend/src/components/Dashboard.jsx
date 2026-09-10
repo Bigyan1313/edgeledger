@@ -1,5 +1,9 @@
 import PnlCalendar from './PnlCalendar.jsx'
+import BalanceCard from './BalanceCard.jsx'
 import { RISKY_TECHNICAL_SETUPS } from '../constants/trade.js'
+import {
+  TrendingUp, Target, Scale, Activity, AlertTriangle, LineChart, ShieldCheck, Layers,
+} from 'lucide-react'
 
 // Stats are computed over CLOSED trades only. An open Stage A entry has no
 // result yet, and folding it in as a zero would drag every average toward it.
@@ -36,17 +40,26 @@ function computeStats(allTrades) {
            wins: wins.length, losses: losses.length }
 }
 
-function Stat({ label, value, sub, color = 'text-gray-100' }) {
+// Modelled on the reference's balance card: a dimmed label above an oversized
+// figure, with the fractional part dropped to grey so the eye lands on the whole
+// number first.
+function Stat({ label, value, sub, icon: Icon, color = 'text-bright' }) {
+  const [whole, fraction] = String(value).split(/(\.\d+$)/)
   return (
-    <div className="bg-surface border border-line rounded-xl px-3.5 py-3">
-      <div className="text-[11px] text-muted">{label}</div>
-      <div className={`text-xl font-semibold mt-1 ${color}`}>{value}</div>
-      {sub && <div className="text-[11px] text-muted mt-0.5">{sub}</div>}
+    <div className="card px-4 py-3.5">
+      <div className="flex items-center gap-1.5 text-[11px] text-muted uppercase tracking-wider">
+        {Icon && <Icon size={12} strokeWidth={2} className="text-violet-soft" />}
+        {label}
+      </div>
+      <div className={`text-[26px] leading-tight font-semibold mt-1.5 tnum tracking-tight ${color}`}>
+        {whole}{fraction && <span className="text-muted">{fraction}</span>}
+      </div>
+      {sub && <div className="text-[11px] text-muted mt-0.5 tnum">{sub}</div>}
     </div>
   )
 }
 
-export default function Dashboard({ trades }) {
+export default function Dashboard({ trades, accounts = [] }) {
   const s = computeStats(trades)
 
   if (!s) {
@@ -57,42 +70,48 @@ export default function Dashboard({ trades }) {
     )
   }
 
-  const pnlColor = s.netPnl >= 0 ? 'text-emerald-400' : 'text-red-400'
   const fmt = (n, d = 2) => n == null ? '—' : n.toFixed(d)
-  const fmtDollar = n => `${n >= 0 ? '+' : ''}$${Math.abs(n).toFixed(2)}`
 
   return (
     <div className="space-y-4">
       {/* Key stats grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        <Stat label="Net P&L"       value={fmtDollar(s.netPnl)}          color={pnlColor} />
-        <Stat label="Win Rate"      value={`${(s.winRate * 100).toFixed(1)}%`}
+      <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] gap-3 items-start">
+        <BalanceCard
+          netPnl={s.netPnl}
+          accounts={accounts}
+          openCount={trades.filter(t => t.entryStage === 'pending_exit').length}
+          totalTrades={s.totalTrades}
+        />
+        <div className="grid grid-cols-2 gap-3">
+          <Stat label="Win Rate"      value={`${(s.winRate * 100).toFixed(1)}%`} icon={Target}
                                     sub={`${s.wins}W / ${s.losses}L`} />
-        <Stat label="Profit Factor" value={s.profitFactor ? fmt(s.profitFactor) : '∞'}
-                                    color={s.profitFactor >= 1 ? 'text-emerald-400' : 'text-red-400'} />
-        <Stat label="Expectancy"    value={`$${fmt(s.expectancy)}`}
-                                    color={s.expectancy >= 0 ? 'text-emerald-400' : 'text-red-400'} />
+          <Stat label="Profit Factor" value={s.profitFactor ? fmt(s.profitFactor) : '∞'} icon={Scale}
+                                      color={s.profitFactor >= 1 ? 'text-gain' : 'text-loss'} />
+          <Stat label="Expectancy"    value={`$${fmt(s.expectancy)}`} icon={Activity}
+                                      color={s.expectancy >= 0 ? 'text-gain' : 'text-loss'} />
+          <Stat label="Avg R"         value={s.avgR != null ? `${fmt(s.avgR)}R` : '—'} icon={TrendingUp} />
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        <Stat label="Avg R"         value={s.avgR != null ? `${fmt(s.avgR)}R` : '—'} />
-        <Stat label="Avg Win"       value={`$${fmt(s.avgWin)}`}   color="text-emerald-400" />
-        <Stat label="Avg Loss"      value={`$${fmt(s.avgLoss)}`}  color="text-red-400" />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Stat label="Avg Win"       value={`$${fmt(s.avgWin)}`}   color="text-gain" />
+        <Stat label="Avg Loss"      value={`$${fmt(s.avgLoss)}`}  color="text-loss" />
         <Stat label="Total Trades"  value={s.totalTrades} />
+        <Stat label="Biggest Loss"  value={`$${fmt(Math.abs(s.biggestLoss))}`} color="text-loss" />
       </div>
 
       {/* Danger zone */}
       {(s.fullPortCount > 0 || s.biggestLoss < -200) && (
-        <div className="bg-red-950/60 border border-red-800/60 rounded-xl p-4 flex items-start gap-4">
-          <span className="text-red-400 text-xl mt-0.5">⚠</span>
+        <div className="rounded-[24px] border border-black bg-loss-bg/70 p-4 flex items-start gap-3.5 backdrop-blur-sm">
+          <AlertTriangle size={18} strokeWidth={2} className="text-loss mt-0.5 shrink-0" />
           <div className="space-y-1 text-sm">
             {s.fullPortCount > 0 && (
-              <p className="text-red-300">
+              <p className="text-loss/90">
                 <strong>{s.fullPortCount}</strong> full-port trade{s.fullPortCount !== 1 ? 's' : ''} logged.
               </p>
             )}
             {s.biggestLoss < -200 && (
-              <p className="text-red-300">
+              <p className="text-loss/90">
                 Biggest single loss: <strong>${Math.abs(s.biggestLoss).toFixed(2)}</strong>
               </p>
             )}
@@ -101,8 +120,11 @@ export default function Dashboard({ trades }) {
       )}
 
       {/* Equity curve (simple) */}
-      <div className="bg-surface border border-line rounded-xl p-4">
-        <div className="text-[11px] text-muted mb-3">Equity Curve</div>
+      <div className="card p-5">
+        <div className="flex items-center gap-2 text-[11px] text-muted uppercase tracking-wider mb-4">
+          <LineChart size={13} strokeWidth={2} className="text-violet-soft" />
+          Equity Curve
+        </div>
         <EquityCurve points={s.equity} />
       </div>
 
@@ -139,8 +161,11 @@ function DisciplineMirror({ trades }) {
   const notCalm = splitStats(trades.filter(t => t.emotionalState && t.emotionalState !== 'Calm'))
 
   return (
-    <div className="bg-surface border border-line rounded-xl p-4 space-y-4">
-      <div className="text-[11px] text-muted">Discipline Mirror</div>
+    <div className="card p-5 space-y-4">
+      <div className="flex items-center gap-2 text-[11px] text-muted uppercase tracking-wider">
+        <ShieldCheck size={13} strokeWidth={2} className="text-violet-soft" />
+        Discipline Mirror
+      </div>
       <div className="grid sm:grid-cols-2 gap-4">
         <MirrorPair
           title="Checklist"
@@ -161,7 +186,7 @@ function MirrorPair({ title, good, bad }) {
   const Side = ({ data, tone }) => (
     <div className="flex-1">
       <div className="text-xs text-gray-500 mb-1">{data.label}</div>
-      <div className={`text-lg font-bold ${data.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+      <div className={`text-lg font-bold ${data.pnl >= 0 ? 'text-gain' : 'text-loss'}`}>
         {data.count === 0 ? '—' : `${data.pnl >= 0 ? '+' : ''}$${data.pnl.toFixed(0)}`}
       </div>
       <div className="text-xs text-gray-500">
@@ -170,7 +195,7 @@ function MirrorPair({ title, good, bad }) {
     </div>
   )
   return (
-    <div className="bg-surface-2 rounded-lg p-3">
+    <div className="glass rounded-[16px] p-3.5">
       <div className="text-xs font-medium text-faint mb-2">{title}</div>
       <div className="flex gap-3">
         <Side data={good} tone="good" />
@@ -202,9 +227,9 @@ function EquityCurve({ points }) {
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 120 }}>
-      <line x1={PAD} y1={zeroY} x2={W - PAD} y2={zeroY} stroke="#374151" strokeWidth="1" />
-      <polygon points={area} fill={isUp ? 'rgba(52,211,153,0.08)' : 'rgba(239,68,68,0.08)'} />
-      <polyline points={polyline} fill="none" stroke={isUp ? '#34d399' : '#ef4444'} strokeWidth="2" strokeLinejoin="round" />
+      <line x1={PAD} y1={zeroY} x2={W - PAD} y2={zeroY} stroke="rgb(124 124 134 / 0.35)" strokeWidth="1" />
+      <polygon points={area} fill={isUp ? 'rgb(52 199 89 / 0.12)' : 'rgb(255 69 58 / 0.12)'} />
+      <polyline points={polyline} fill="none" stroke={isUp ? '#34c759' : '#ff453a'} strokeWidth="2" strokeLinejoin="round" />
     </svg>
   )
 }
@@ -223,8 +248,11 @@ function SetupTable({ trades }) {
   const rows = Object.entries(bySetup).sort((a, b) => b[1].pnl - a[1].pnl)
 
   return (
-    <div className="bg-surface border border-line rounded-xl p-4">
-      <div className="text-[11px] text-muted mb-3">Performance by Setup</div>
+    <div className="card p-5">
+      <div className="flex items-center gap-2 text-[11px] text-muted uppercase tracking-wider mb-4">
+        <Layers size={13} strokeWidth={2} className="text-violet-soft" />
+        Performance by Setup
+      </div>
       <table className="w-full text-sm table-fixed">
         <colgroup>
           <col className="w-auto" />
@@ -242,13 +270,13 @@ function SetupTable({ trades }) {
         </thead>
         <tbody className="divide-y divide-line-soft">
           {rows.map(([setup, s]) => (
-            <tr key={setup} className={RISKY_TECHNICAL_SETUPS.has(setup) ? 'text-red-400' : 'text-gray-300'}>
+            <tr key={setup} className={RISKY_TECHNICAL_SETUPS.has(setup) ? 'text-loss' : 'text-faint'}>
               <td className="py-2 text-xs pr-2">{RISKY_TECHNICAL_SETUPS.has(setup) && '⚠ '}{setup}</td>
               <td className="py-2 text-right text-gray-400">{s.trades}</td>
               <td className="py-2 text-right text-gray-400">
                 {((s.wins / s.trades) * 100).toFixed(0)}%
               </td>
-              <td className={`py-2 text-right font-semibold ${s.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              <td className={`py-2 text-right font-semibold ${s.pnl >= 0 ? 'text-gain' : 'text-loss'}`}>
                 {s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}
               </td>
             </tr>

@@ -22,6 +22,19 @@ export const SUPPORTED_MEDIA_TYPES = ['image/png', 'image/jpeg', 'image/webp', '
 // Every field the model may fill. Deliberately nullable *everywhere*: a broker's
 // position panel rarely shows all of these at once, and "not shown" has to be
 // expressible or the model will invent something to fill the slot.
+// `strict: true` guarantees the arguments validate against this schema, which is
+// what lets normalizeExtraction below trust the *shape* and spend its effort on
+// the values. Strict mode accepts `anyOf`, so every nullable field is written
+// that way: a bare `type: ['string', 'null']` union is not one of the supported
+// forms, and an enum with `null` as a member is not either. Both were rejected
+// for the whole schema, which failed every request identically no matter what
+// the screenshot held — the schema had never been sent to the API, because the
+// route tests stub the client and only the eval makes a real call.
+const nullable = (type, description, extra = {}) => ({
+  anyOf: [{ type, ...extra }, { type: 'null' }],
+  description,
+})
+
 export const EXTRACTION_TOOL = {
   name: 'record_trade_from_screenshot',
   description:
@@ -31,19 +44,19 @@ export const EXTRACTION_TOOL = {
   input_schema: {
     type: 'object',
     properties: {
-      brokerPositionId: { type: ['string', 'null'], description: 'The platform\'s own Position ID / Deal ID, exactly as shown.' },
-      brokerAccountId: { type: ['string', 'null'], description: 'Account number or name, exactly as shown.' },
-      brokerPlatform: { type: ['string', 'null'], enum: [...BROKER_PLATFORMS, null], description: 'Which platform the screenshot is from, if identifiable from its UI.' },
-      pair: { type: ['string', 'null'], description: 'The instrument symbol exactly as the broker writes it, e.g. "XAUUSD.pro". Do not normalise or expand it.' },
-      direction: { type: ['string', 'null'], enum: [...DIRECTIONS, null], description: 'long for Buy, short for Sell.' },
-      entryTimeUtc: { type: ['string', 'null'], description: 'Entry/open time as an ISO 8601 timestamp. Only if a date AND time are both visible.' },
-      exitTimeUtc: { type: ['string', 'null'], description: 'Exit/close time as an ISO 8601 timestamp. Only if a date AND time are both visible.' },
-      entryPrice: { type: ['number', 'null'], description: 'Open/entry price.' },
-      stopLoss: { type: ['number', 'null'], description: 'Stop loss price. Null if the S/L column is empty or shows a dash.' },
-      takeProfit: { type: ['number', 'null'], description: 'Take profit price. Null if empty.' },
-      exitPrice: { type: ['number', 'null'], description: 'Close/exit price.' },
-      lotSize: { type: ['number', 'null'], description: 'Position size in lots/volume.' },
-      pnl: { type: ['number', 'null'], description: 'Realised profit or loss in account currency. Negative for a loss.' },
+      brokerPositionId: nullable('string', 'The platform\'s own Position ID / Deal ID, exactly as shown.'),
+      brokerAccountId: nullable('string', 'Account number or name, exactly as shown.'),
+      brokerPlatform: nullable('string', 'Which platform the screenshot is from, if identifiable from its UI.', { enum: BROKER_PLATFORMS }),
+      pair: nullable('string', 'The instrument symbol exactly as the broker writes it, e.g. "XAUUSD.pro". Do not normalise or expand it.'),
+      direction: nullable('string', 'long for Buy, short for Sell.', { enum: DIRECTIONS }),
+      entryTimeUtc: nullable('string', 'Entry/open time as an ISO 8601 timestamp. Only if a date AND time are both visible.'),
+      exitTimeUtc: nullable('string', 'Exit/close time as an ISO 8601 timestamp. Only if a date AND time are both visible.'),
+      entryPrice: nullable('number', 'Open/entry price.'),
+      stopLoss: nullable('number', 'Stop loss price. Null if the S/L column is empty or shows a dash.'),
+      takeProfit: nullable('number', 'Take profit price. Null if empty.'),
+      exitPrice: nullable('number', 'Close/exit price.'),
+      lotSize: nullable('number', 'Position size in lots/volume.'),
+      pnl: nullable('number', 'Realised profit or loss in account currency. Negative for a loss.'),
       isClosed: { type: 'boolean', description: 'True if the screenshot shows a closed/historical position, false if it is still open.' },
       unreadableFields: {
         type: 'array',

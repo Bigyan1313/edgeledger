@@ -300,3 +300,38 @@ rawDescribe('upstream failures are told apart', () => {
     }
   })
 })
+
+// The 400 branch is the one that forwards upstream text, so it gets its own
+// leak check on top of the sweep above.
+rawDescribe('the forwarded 400 reason', () => {
+  let describeUpstreamFailure
+  before(async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://unused@localhost:5432/unused'
+    ;({ describeUpstreamFailure } = await import('../src/routes/extract.js'))
+  })
+
+  test("names the real cause instead of blaming the user's image", () => {
+    const err = Object.assign(new Error('400 ...'), {
+      status: 400,
+      error: { error: { type: 'invalid_request_error', message: 'tools.0.custom.input_schema: unsupported' } },
+    })
+    const r = describeUpstreamFailure(err)
+    assert.match(r.error, /input_schema/)
+    assert.doesNotMatch(r.error, /re-save/i)
+  })
+
+  test('falls back to the image advice when upstream said nothing', () => {
+    const r = describeUpstreamFailure(Object.assign(new Error('x'), { status: 400 }))
+    assert.match(r.error, /Re-save it as a PNG/)
+  })
+
+  test('redacts anything key-shaped before it reaches the browser', () => {
+    const err = Object.assign(new Error('x'), {
+      status: 400,
+      error: { error: { message: 'bad x-api-key sk-ant-api03-abc123 supplied' } },
+    })
+    const r = describeUpstreamFailure(err)
+    assert.ok(!r.error.includes('sk-ant'), 'a key-shaped token reached the client')
+    assert.match(r.error, /\[redacted\]/)
+  })
+})

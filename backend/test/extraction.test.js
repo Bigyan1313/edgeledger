@@ -166,9 +166,26 @@ test('every extractable field is nullable, so "not shown" is always expressible'
   const props = EXTRACTION_TOOL.input_schema.properties
   for (const [name, spec] of Object.entries(props)) {
     if (name === 'isClosed' || name === 'unreadableFields') continue
-    assert.ok(Array.isArray(spec.type) && spec.type.includes('null'),
-      `${name} must be nullable — a field that cannot be null invites invention`)
+    assert.ok(
+      Array.isArray(spec.anyOf) && spec.anyOf.some(s => s.type === 'null'),
+      `${name} must be nullable — a field that cannot be null invites invention`
+    )
   }
+})
+
+// The schema is only ever sent to the API by the eval, so nothing in the normal
+// test run would notice it being rejected — and a rejected schema fails every
+// screenshot identically, which reads like a bad image rather than a bad
+// schema. These two constructs are what it was rejected for.
+test('no field uses a form strict mode does not accept', () => {
+  const walk = (spec, path) => {
+    assert.ok(!Array.isArray(spec.type),
+      `${path}: a ['x','null'] type union is not an accepted strict-mode form — use anyOf`)
+    assert.ok(!(spec.enum ?? []).includes(null),
+      `${path}: null is not a valid enum member — express it as an anyOf branch`)
+    for (const [i, branch] of (spec.anyOf ?? []).entries()) walk(branch, `${path}.anyOf[${i}]`)
+  }
+  for (const [name, spec] of Object.entries(EXTRACTION_TOOL.input_schema.properties)) walk(spec, name)
 })
 
 test('the schema is strict and closed', () => {

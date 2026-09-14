@@ -112,6 +112,14 @@ export default createExtractRouter()
 // The upstream message is read but never forwarded: it can quote the failing
 // request back, and that request carries the API key. Everything the client
 // sees below is a fixed string chosen by status and error type.
+// Belt and braces. Anthropic's error messages do not quote credentials back,
+// but this is the one place upstream text reaches a browser, so anything
+// key-shaped is redacted before it can.
+function scrubSecrets(text) {
+  if (typeof text !== 'string' || text.trim() === '') return null
+  return text.replace(/sk-[A-Za-z0-9_-]+/g, '[redacted]').slice(0, 300)
+}
+
 export function describeUpstreamFailure(err) {
   const status = err?.status
   const type = err?.error?.error?.type ?? err?.error?.type
@@ -156,11 +164,18 @@ export function describeUpstreamFailure(err) {
     }
   }
 
+  // A 400 is not only "bad image" — a malformed tool schema lands here too, and
+  // it fails every screenshot identically, so telling the user to re-save their
+  // perfectly good PNG sends them chasing the wrong thing. Anthropic's own
+  // message names the real cause, so pass it through rather than guessing at it.
   if (status === 400 || type === 'invalid_request_error') {
+    const upstream = scrubSecrets(err?.error?.error?.message)
     return {
       status: 400,
-      error: 'That image could not be read as an image. Re-save it as a PNG or JPEG and try again.',
-      logHint: 'Upstream rejected the request as invalid — most likely a corrupt or mislabelled image.',
+      error: upstream
+        ? `The screenshot reader rejected the request: ${upstream}`
+        : 'That image could not be read. Re-save it as a PNG or JPEG and try again.',
+      logHint: `Upstream rejected the request as invalid: ${upstream || 'no message given'}`,
     }
   }
 

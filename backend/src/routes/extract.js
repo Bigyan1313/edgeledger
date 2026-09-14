@@ -6,6 +6,7 @@ import {
   extractionCoverage,
   parseImageDataUrl,
   callExtractionModel,
+  EXTRACTION_MODEL,
 } from '../domain/extraction.js'
 
 const apiKey = process.env.ANTHROPIC_API_KEY
@@ -48,8 +49,12 @@ export function createExtractRouter({ client = defaultClient } = {}) {
       if (err?.status === 429) {
         return res.status(429).json({ error: 'Too many screenshot imports at once. Wait a moment and try again.' })
       }
-      console.error('Screenshot extraction failed:', err)
-      return res.status(502).json({ error: 'Could not read that screenshot. Try again, or enter the trade manually.' })
+      const failure = describeUpstreamFailure(err)
+      console.error(
+        `Screenshot extraction failed [status=${err?.status ?? 'none'} type=${err?.error?.error?.type ?? err?.error?.type ?? 'none'}]: ${failure.logHint}`,
+        err,
+      )
+      return res.status(failure.status).json({ error: failure.error })
     }
 
     if (!raw) {
@@ -97,3 +102,77 @@ export function createExtractRouter({ client = defaultClient } = {}) {
 }
 
 export default createExtractRouter()
+
+// Every upstream failure used to collapse into one 502 reading "Could not read
+// that screenshot" — which is what a bad API key, an empty credit balance, and
+// a genuinely unreadable image all looked like from the browser. The operator
+// had to open the server log to tell them apart, and the person at the screen
+// was told to retry something that could never succeed.
+//
+// The upstream message is read but never forwarded: it can quote the failing
+// request back, and that request carries the API key. Everything the client
+// sees below is a fixed string chosen by status and error type.
+export function describeUpstreamFailure(err) {
+  const status = err?.status
+  const type = err?.error?.error?.type ?? err?.error?.type
+  const detail = typeof err?.message === 'string' ? err.message : ''
+
+  // A rejected key, and a key without access to this model, are both fixed in
+  // the dashboard rather than by retrying — so they are 503, like a key that
+  // was never set at all.
+  if (status === 401 || status === 403 || type === 'authentication_error' || type === 'permission_error') {
+    return {
+      status: 503,
+      error: "Screenshot import is misconfigured: the server's Anthropic API key was rejected. Check ANTHROPIC_API_KEY in the server environment.",
+      logHint: 'ANTHROPIC_API_KEY was rejected upstream (401/403). Check for wrapping quotes or trailing whitespace in the value.',
+    }
+  }
+
+  if (/credit balance|insufficient|billing/i.test(detail)) {
+    return {
+      status: 503,
+      error: 'Screenshot import is unavailable: the Anthropic account backing this server is out of credit.',
+      logHint: 'Anthropic reports no available credit. Add credit at console.anthropic.com/settings/billing.',
+    }
+  }
+
+  if (status === 404 || type === 'not_found_error') {
+    return {
+      status: 503,
+      error: 'Screenshot import is misconfigured: this server is asking for a model its account cannot use.',
+      logHint: `Model "${EXTRACTION_MODEL}" was not found for this account.`,
+    }
+  }
+
+  // Under our own 5MB ceiling but still refused — usually pixel dimensions
+  // rather than bytes, which resizing fixes and retrying does not.
+  if (status === 413) {
+    return {
+      status: 400,
+      error: 'That image is too large for the reader. Crop it to the order ticket, or scale it down, and try again.',
+      logHint: 'Upstream rejected the image as too large despite passing the local byte check.',
+    }
+  }
+
+  if (status === 400 || type === 'invalid_request_error') {
+    return {
+      status: 400,
+      error: 'That image could not be read as an image. Re-save it as a PNG or JPEG and try again.',
+      logHint: 'Upstream rejected the request as invalid — most likely a corrupt or mislabelled image.',
+    }
+  }
+
+  if (status === 529 || type === 'overloaded_error') {
+    return {
+      status: 503,
+      error: 'The screenshot reader is busy right now. Try again in a moment.',
+      logHint: 'Upstream reported overload.',
+    }
+  }
+
+  return {
+    status: 502,
+    error: 'Could not read that screenshot. Try again, or enter the trade manually.',
+    logHint: 'Unclassified upstream failure.',
+  }
+}

@@ -234,3 +234,62 @@ describe('duplicate imports', () => {
     stub.state.reading = READING
   })
 })
+
+// The mapping from an upstream failure to what the operator and the user each
+// get told. Pure, so unlike the rest of this file it needs no database — and it
+// is worth testing precisely because the failures it separates (a rejected key,
+// an empty balance, a bad image) are indistinguishable from the browser once
+// they have been flattened into a single 502.
+rawDescribe('upstream failures are told apart', () => {
+  let describeUpstreamFailure
+  before(async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://unused@localhost:5432/unused'
+    ;({ describeUpstreamFailure } = await import('../src/routes/extract.js'))
+  })
+
+  test('a rejected API key reads as misconfiguration, not as a bad screenshot', () => {
+    const r = describeUpstreamFailure(Object.assign(new Error('x'), { status: 401 }))
+    assert.equal(r.status, 503)
+    assert.match(r.error, /ANTHROPIC_API_KEY/)
+    assert.doesNotMatch(r.error, /try again/i, 'retrying cannot fix a rejected key')
+  })
+
+  test('an empty credit balance names the account, not the image', () => {
+    const err = Object.assign(new Error('Your credit balance is too low to access the API'), { status: 400 })
+    const r = describeUpstreamFailure(err)
+    assert.equal(r.status, 503)
+    assert.match(r.error, /out of credit/i)
+  })
+
+  test('an unavailable model is reported as a server problem', () => {
+    const r = describeUpstreamFailure(Object.assign(new Error('x'), { status: 404 }))
+    assert.equal(r.status, 503)
+    assert.match(r.error, /model/i)
+    assert.match(r.logHint, /claude-haiku/)
+  })
+
+  test('an image refused upstream is a 400 the user can act on', () => {
+    const r = describeUpstreamFailure(Object.assign(new Error('x'), { status: 413 }))
+    assert.equal(r.status, 400)
+    assert.match(r.error, /crop|scale/i)
+  })
+
+  test('overload is transient and says so', () => {
+    const r = describeUpstreamFailure(Object.assign(new Error('x'), { status: 529 }))
+    assert.equal(r.status, 503)
+    assert.match(r.error, /try again/i)
+  })
+
+  test('an unrecognised failure still falls back to the generic 502', () => {
+    const r = describeUpstreamFailure(Object.assign(new Error('x'), { status: 500 }))
+    assert.equal(r.status, 502)
+  })
+
+  test('no branch ever forwards the upstream message to the client', () => {
+    for (const status of [401, 403, 400, 404, 413, 500, 529]) {
+      const err = Object.assign(new Error('request failed: x-api-key sk-ant-secret-value'), { status })
+      const r = describeUpstreamFailure(err)
+      assert.ok(!r.error.includes('sk-ant'), `status ${status} leaked the key into the client message`)
+    }
+  })
+})

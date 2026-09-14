@@ -254,11 +254,18 @@ rawDescribe('upstream failures are told apart', () => {
     assert.doesNotMatch(r.error, /try again/i, 'retrying cannot fix a rejected key')
   })
 
-  test('an empty credit balance names the account, not the image', () => {
-    const err = Object.assign(new Error('Your credit balance is too low to access the API'), { status: 400 })
-    const r = describeUpstreamFailure(err)
-    assert.equal(r.status, 503)
-    assert.match(r.error, /out of credit/i)
+  test('a billing failure names the account, not the image', () => {
+    // 402 billing_error is the documented status; the 400 shape is the one the
+    // balance failure has historically arrived as. Both have the same fix.
+    for (const err of [
+      Object.assign(new Error('x'), { status: 402 }),
+      Object.assign(new Error('x'), { status: 400, error: { type: 'billing_error' } }),
+      Object.assign(new Error('Your credit balance is too low to access the API'), { status: 400 }),
+    ]) {
+      const r = describeUpstreamFailure(err)
+      assert.equal(r.status, 503)
+      assert.match(r.error, /billed|credit/i)
+    }
   })
 
   test('an unavailable model is reported as a server problem', () => {
@@ -286,7 +293,7 @@ rawDescribe('upstream failures are told apart', () => {
   })
 
   test('no branch ever forwards the upstream message to the client', () => {
-    for (const status of [401, 403, 400, 404, 413, 500, 529]) {
+    for (const status of [400, 401, 402, 403, 404, 413, 500, 529]) {
       const err = Object.assign(new Error('request failed: x-api-key sk-ant-secret-value'), { status })
       const r = describeUpstreamFailure(err)
       assert.ok(!r.error.includes('sk-ant'), `status ${status} leaked the key into the client message`)

@@ -128,11 +128,13 @@ export function describeUpstreamFailure(err) {
     }
   }
 
-  if (/credit balance|insufficient|billing/i.test(detail)) {
+  // Billing is its own status (402 billing_error). The message check behind it
+  // catches the balance failures that arrive as a 400 instead.
+  if (status === 402 || type === 'billing_error' || /credit balance|insufficient|billing/i.test(detail)) {
     return {
       status: 503,
-      error: 'Screenshot import is unavailable: the Anthropic account backing this server is out of credit.',
-      logHint: 'Anthropic reports no available credit. Add credit at console.anthropic.com/settings/billing.',
+      error: 'Screenshot import is unavailable: the Anthropic account backing this server cannot be billed — most likely no credit.',
+      logHint: 'Anthropic reported a billing problem. Check the balance at console.anthropic.com/settings/billing.',
     }
   }
 

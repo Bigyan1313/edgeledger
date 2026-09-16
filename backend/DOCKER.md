@@ -130,6 +130,6 @@ verified above.
 
 ## Next: Stage 2
 
-Add Postgres and Redis as their own containers via `docker compose`, drop the
-`host.docker.internal` workaround in favour of service-name DNS, and move
-`prisma migrate deploy` into the startup path.
+See [`../COMPOSE.md`](../COMPOSE.md). Postgres moves into its own container,
+the `host.docker.internal` workaround gives way to service-name DNS, and
+`prisma migrate deploy` becomes a one-shot job the API waits on.

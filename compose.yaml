@@ -1,0 +1,110 @@
+# Stage 2 — the API and its database, as separate containers on one network.
+#
+# `docker compose up` builds the backend image, starts Postgres, waits for it to
+# be genuinely ready, applies migrations once, then starts the API.
+#
+# See COMPOSE.md for what each block teaches and why it's written this way.
+
+name: edgeledger
+
+# A YAML anchor. The API and the one-shot migrate job need identical database
+# settings, and a second copy is a second thing to forget to update.
+#
+# Note the host: `postgres`. Not localhost, not an IP — Compose puts every
+# service on a shared network where the service name resolves via DNS to that
+# container. This is the piece Stage 1 worked around with host.docker.internal.
+x-db-env: &db-env
+  DATABASE_URL: postgresql://${POSTGRES_USER:-edgeledger}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env — copy .env.example}@postgres:5432/${POSTGRES_DB:-edgeledger}
+
+services:
+  postgres:
+    image: postgres:16-bookworm
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-edgeledger}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-edgeledger}
+    volumes:
+      # A named volume. Without this line, every `docker compose down` would
+      # destroy your trade history along with the container.
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      # Bound to loopback, not 0.0.0.0 — reachable from psql or a GUI on this
+      # machine, not from the network. Nothing in the stack needs this published
+      # at all; it's here for you to poke at the data.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      # `pg_isready`, not "is the container running". Postgres accepts
+      # connections several seconds after the process starts, and the difference
+      # is exactly the race that makes a stack flaky on a cold boot.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-edgeledger} -d ${POSTGRES_DB:-edgeledger}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # A one-shot job, not a server: it applies migrations, exits 0, and stays
+  # exited. Running migrations here rather than in the API's startup path means
+  # they happen exactly once no matter how many API replicas there are — which
+  # is what makes `docker compose up --scale api=3` safe, and the same reason
+  # Kubernetes will run this as a Job in a later stage.
+  migrate:
+    build:
+      context: ./backend
+    command: ["npx", "prisma", "migrate", "deploy"]
+    environment:
+      <<: *db-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: ./backend
+    environment:
+      <<: *db-env
+      NODE_ENV: production
+      PORT: 3001
+      # No default and no fallback: the server throws at startup without it
+      # (src/auth/jwt.js), so failing here with a clear message beats a
+      # crash-looping container.
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — copy .env.example}
+      # Vite's dev ports, so a frontend running on the host can call this API.
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173,http://localhost:5174}
+      # Optional. The `:-` keeps Compose from erroring when they're unset;
+      # Google sign-in and screenshot import stay off until you supply them.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports:
+      - "${API_PORT:-3001}:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # Not just "started" — the API waits for migrations to finish cleanly. If
+      # `migrate` exits non-zero, the API never starts, which is what you want:
+      # a half-migrated schema should stop the deploy, not serve errors.
+      migrate:
+        condition: service_completed_successfully
+    # No healthcheck block here on purpose: the image carries its own
+    # HEALTHCHECK from the Dockerfile, and Compose honours it. Watch the STATUS
+    # column in `docker compose ps`.
+    restart: unless-stopped
+
+  # Opt-in: `docker compose --profile tools up`. A profile keeps a service
+  # defined but out of the default `up`, which is how you add development
+  # conveniences without making them part of the stack everyone runs.
+  adminer:
+    image: adminer:5
+    profiles: ["tools"]
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    ports:
+      - "127.0.0.1:${ADMINER_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

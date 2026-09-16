@@ -1,0 +1,27 @@
+# Everything here is excluded from the build context — the tarball Docker ships
+# to the daemon before the first instruction runs. Smaller context = faster
+# builds, and, more importantly, no secrets sitting one COPY away.
+
+# Reinstalled inside the image by `npm ci`, and a host build would be the wrong
+# platform's binaries anyway (Prisma's engine is native code).
+node_modules/
+npm-debug.log*
+
+# Secrets. The single most important line in this file.
+.env
+.env.*
+!.env.example
+
+# Git history — nothing in the image needs it, and it can be large.
+.git/
+.gitignore
+
+# Not used at runtime.
+test/
+eval/
+scripts/
+*.md
+Dockerfile
+.dockerignore
+
+.DS_Store

@@ -10,6 +10,7 @@ import { BROKER_PLATFORMS } from './tradeSchema.js'
 export const PROFILE_FIELDS = [
   'displayName', 'timezone', 'baseCurrency',
   'defaultBrokerPlatform', 'defaultBrokerAccountId', 'defaultRiskPercent',
+  'minSleepHours',
 ]
 
 // Display-only. Nothing is ever converted between currencies: a converted P&L
@@ -21,7 +22,7 @@ export const BASE_CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD',
 // only, because "CST" is US Central in Chicago and China Standard in Shanghai.
 const IANA_ZONE = /^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+)+$/
 
-function isValidTimezone(tz) {
+export function isValidTimezone(tz) {
   const zone = String(tz).trim()
   if (zone !== 'UTC' && !IANA_ZONE.test(zone)) return false
   try {
@@ -67,6 +68,17 @@ export function validateProfile(input) {
     }
   }
 
+  if (!blank(input.minSleepHours)) {
+    const hours = Number(input.minSleepHours)
+    if (!Number.isFinite(hours)) {
+      add('minSleepHours', 'Minimum sleep must be a number of hours.')
+    } else if (hours < 4 || hours > 10) {
+      // Below 4 the check stops checking anything; above 10 it blocks most
+      // healthy nights. Either end turns a guard into a formality.
+      add('minSleepHours', 'Minimum sleep must be between 4 and 10 hours.')
+    }
+  }
+
   return errors
 }
 
@@ -78,7 +90,7 @@ export function coerceProfile(body) {
     if (!Object.prototype.hasOwnProperty.call(body, field)) continue
     const value = body[field]
     if (blank(value)) { out[field] = null; continue }
-    if (field === 'defaultRiskPercent') { out[field] = Number(value); continue }
+    if (field === 'defaultRiskPercent' || field === 'minSleepHours') { out[field] = Number(value); continue }
     if (field === 'baseCurrency') { out[field] = String(value).trim().toUpperCase(); continue }
     out[field] = String(value).trim()
   }

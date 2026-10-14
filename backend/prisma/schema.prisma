@@ -17,6 +17,7 @@ model User {
   trades       Trade[]
   accounts     Account[]
   profile      Profile?
+  sessions     TradingSession[]
 }
 
 // The trader behind the journal, and the defaults that make logging faster.
@@ -52,6 +53,11 @@ model Profile {
   // Seeds the position-size calculator.
   defaultRiskPercent Float?
 
+  // The trader's own floor for the pre-session readiness check. Unset means the
+  // app's default applies — and each session records the floor it was actually
+  // judged against, so this can change without rewriting what past days meant.
+  minSleepHours Float?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -66,6 +72,7 @@ model Account {
   startingBalance Float?
   createdAt       DateTime @default(now())
   trades          Trade[]
+  sessions        TradingSession[]
 }
 
 // Schema v2. Two conventions run through this model:
@@ -168,6 +175,14 @@ model Trade {
   // Task 8 — recomputed on every write. Flags describe, they never repair.
   dataQualityFlags String[] @default([])
 
+  // The session this trade was logged under, and which of its rules were
+  // broken at the moment it was logged. Written once at Stage A and never
+  // recomputed: unlike a data-quality flag, a broken rule is a fact about
+  // the decision, and later edits to the trade cannot un-break it.
+  sessionId      Int?
+  session        TradingSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  ruleViolations String[]        @default([])
+
   createdAt DateTime @default(now())
 
   // Task 1 — a position ID identifies one position exactly once. Scoped to the
@@ -194,4 +209,69 @@ model TradeAmendment {
   amendedAt DateTime @default(now())
 
   @@index([tradeId])
+}
+
+// A trading day's plan, written before the first trade and locked once written.
+//
+// This is the same contract as Stage A, one level up: the plan is what you
+// committed to while calm, and the point of locking it is that the moment you
+// most want to change it is the moment you should not be able to. There is no
+// delete and no edit. A session that fails the readiness check is still stored
+// — "I wanted to trade on four hours of sleep and was stopped" is the most
+// useful row in the table.
+model TradingSession {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId Int?
+  account   Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  // The trading day as a local calendar date, and the zone it was computed in.
+  // Stored as text because a "day" is not an instant: 9:30 in New York and
+  // 9:30 in Kathmandu are the same date in neither UTC nor each other.
+  sessionDate String
+  timezone    String
+
+  // Readiness. Numbers rather than "do you feel ready?", because the person
+  // answering at 9:25 wants to trade and will round up a feeling. An hour
+  // count is harder to round up.
+  sleepHours           Float
+  fitToTrade           Boolean
+  minSleepHoursApplied Float
+
+  // The plan. wantToSee is what has to appear before any trade; scenarios are
+  // the if/then branches decided in advance; noTradeIf is the condition that
+  // ends the day. maxTrades is at most 2, enforced in the API and again by a
+  // CHECK constraint. All four are null on a blocked day — nobody should have
+  // to write a plan to be told they may not trade — and a CHECK constraint
+  // requires them on every day that opened.
+  bias      String? // long | short | neutral
+  wantToSee String?
+  scenarios Json? // [{ "if": string, "then": string }]
+  noTradeIf String?
+  maxTrades Int?
+
+  // Trades logged under this plan. Only ever incremented: deleting a trade
+  // from the journal does not un-take it at the broker, so it must not hand
+  // back a slot under the cap.
+  tradesLogged Int @default(0)
+
+  // open | blocked | closed. Blocked is decided once, at write time, by the
+  // readiness check — and it is final for the day.
+  status         String
+  blockedReasons String[] @default([])
+  openedAt       DateTime @default(now())
+
+  // Post-session review.
+  closedAt     DateTime?
+  followedPlan Boolean?
+  review       String?
+
+  trades    Trade[]
+  createdAt DateTime @default(now())
+
+  // One plan per account per day. Postgres treats NULLs as distinct, so the
+  // no-account case is enforced in the route rather than here.
+  @@unique([userId, accountId, sessionDate])
+  @@index([userId, sessionDate])
 }

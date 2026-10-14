@@ -5,6 +5,8 @@ import { coerceStageA, coerceStageB } from '../domain/coerce.js'
 import { validateStageA, validateStageB, validateAmendment } from '../domain/validation.js'
 import { computeDataQualityFlags } from '../domain/dataQuality.js'
 import { serializeTrade, serializeTrades } from '../domain/serialize.js'
+import { accountAllowed } from './ownership.js'
+import { sessionGateFor, sessionRulesResponse, TradeCapRace } from './sessionGate.js'
 
 const router = Router()
 
@@ -14,16 +16,6 @@ const router = Router()
 const handle = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
 
 // Every route below assumes requireAuth has already run and set req.userId.
-
-// Guard: if a trade references an account, it must be one THIS user owns.
-// (null/undefined account is allowed — trades can be untagged.)
-async function accountAllowed(accountId, userId) {
-  if (accountId == null) return true
-  const acct = await prisma.account.findFirst({
-    where: { id: Number(accountId), userId },
-  })
-  return Boolean(acct)
-}
 
 // One shape for every rejection, so the client can render field-level errors
 // without parsing prose.
@@ -108,6 +100,21 @@ router.post('/', handle(async (req, res) => {
     return res.status(400).json({ error: 'Invalid account' })
   }
 
+  // The session gate. A trade that breaks the day's plan is refused — unless
+  // the request says, explicitly, that the trade was already taken and is
+  // being logged as a rule break. Refusing that case outright would not stop
+  // the trade (it already happened at the broker); it would only keep it out
+  // of the journal, and the trades taken against the plan are precisely the
+  // ones the journal most needs to see.
+  const gate = await sessionGateFor({
+    userId: req.userId,
+    accountId: accountId == null ? null : Number(accountId),
+    entryTimeUtc: input.entryTimeUtc,
+    captureTimezone: input.captureTimezone,
+  })
+  const acknowledged = req.body.acknowledgeRuleBreak === true
+  if (gate.violations.length && !acknowledged) return sessionRulesResponse(res, gate)
+
   // Task 2: journaledAt is set here, server-side, and never written again.
   // A client-supplied value would defeat the entire point of the field.
   const journaledAt = new Date()
@@ -119,14 +126,38 @@ router.post('/', handle(async (req, res) => {
     schemaVersion: SCHEMA_VERSION,
     entryStage: 'pending_exit',
     journaledAt,
+    sessionId: gate.session?.id ?? null,
+    ruleViolations: gate.violations,
   }
 
   try {
-    const trade = await prisma.trade.create({
-      data: { ...draft, dataQualityFlags: computeDataQualityFlags(draft) },
+    const trade = await prisma.$transaction(async (tx) => {
+      if (gate.session) {
+        if (gate.violations.length === 0) {
+          // Conditional, so two simultaneous saves cannot both take the last
+          // slot. maxTrades is immutable, so the value read above is safe to
+          // compare against.
+          const { count } = await tx.tradingSession.updateMany({
+            where: { id: gate.session.id, status: 'open', tradesLogged: { lt: gate.session.maxTrades } },
+            data: { tradesLogged: { increment: 1 } },
+          })
+          if (count === 0) throw new TradeCapRace()
+        } else {
+          await tx.tradingSession.update({
+            where: { id: gate.session.id },
+            data: { tradesLogged: { increment: 1 } },
+          })
+        }
+      }
+      return tx.trade.create({
+        data: { ...draft, dataQualityFlags: computeDataQualityFlags(draft) },
+      })
     })
     res.status(201).json(serializeTrade(trade))
   } catch (err) {
+    if (err instanceof TradeCapRace) {
+      return sessionRulesResponse(res, { session: gate.session, violations: ['over_trade_cap'] })
+    }
     if (isDuplicatePosition(err)) return duplicatePositionResponse(res, input.brokerPositionId)
     throw err
   }
@@ -212,7 +243,19 @@ router.put('/:id', handle(async (req, res) => {
     if (!(await accountAllowed(req.body.accountId, req.userId))) {
       return res.status(400).json({ error: 'Invalid account' })
     }
-    input.accountId = req.body.accountId == null ? null : Number(req.body.accountId)
+    const nextAccountId = req.body.accountId == null ? null : Number(req.body.accountId)
+
+    // A trade logged under a session was counted against that account's plan
+    // for the day. Moving it would leave the slot spent on one account and the
+    // trade appearing on another whose plan never counted it — which is also
+    // exactly how a capped account could be quietly topped up.
+    if (existing.sessionId != null && nextAccountId !== existing.accountId) {
+      return res.status(409).json({
+        error: "This trade was counted against its account's session plan, so it stays on that account.",
+        lockedFields: ['accountId'],
+      })
+    }
+    input.accountId = nextAccountId
   }
 
   if (Array.isArray(req.body.screenshots)) {

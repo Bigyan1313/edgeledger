@@ -10,7 +10,7 @@ import { BROKER_PLATFORMS } from './tradeSchema.js'
 export const PROFILE_FIELDS = [
   'displayName', 'timezone', 'baseCurrency',
   'defaultBrokerPlatform', 'defaultBrokerAccountId', 'defaultRiskPercent',
-  'minSleepHours',
+  'minSleepHours', 'marketOpenTime', 'marketTimezone',
 ]
 
 // Display-only. Nothing is ever converted between currencies: a converted P&L
@@ -77,6 +77,19 @@ export function validateProfile(input) {
       // healthy nights. Either end turns a guard into a formality.
       add('minSleepHours', 'Minimum sleep must be between 4 and 10 hours.')
     }
+  }
+
+  // Same "HH:MM" rule the review window uses (review.js). Kept inline rather
+  // than imported, because review.js imports this module.
+  if (!blank(input.marketOpenTime)) {
+    const t = String(input.marketOpenTime).trim()
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(t) || Number(t.slice(0, 2)) >= 21) {
+      add('marketOpenTime', 'Market open must be a 24-hour time like 09:30, before 21:00.')
+    }
+  }
+
+  if (!blank(input.marketTimezone) && !isValidTimezone(input.marketTimezone)) {
+    add('marketTimezone', 'Market timezone must be an IANA zone name like America/New_York.')
   }
 
   return errors

@@ -18,6 +18,7 @@ model User {
   accounts     Account[]
   profile      Profile?
   sessions     TradingSession[]
+  reviews      PriceActionReview[]
 }
 
 // The trader behind the journal, and the defaults that make logging faster.
@@ -57,6 +58,13 @@ model Profile {
   // app's default applies — and each session records the floor it was actually
   // judged against, so this can change without rewriting what past days meant.
   minSleepHours Float?
+
+  // When the trader's market opens, as a wall-clock time in the market's own
+  // zone. The price action review opens three hours after this. Unset means
+  // the New York cash open (09:30 America/New_York); each review records the
+  // open it was written against, as sessions record their sleep floor.
+  marketOpenTime String? // "HH:MM"
+  marketTimezone String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -274,4 +282,50 @@ model TradingSession {
   // no-account case is enforced in the route rather than here.
   @@unique([userId, accountId, sessionDate])
   @@index([userId, sessionDate])
+}
+
+// The day's price action, reviewed once the morning has played out.
+//
+// Where the session plan is about the trader before the open and the trade is
+// about one decision, this is about the market: what price actually did, set
+// beside what the plan expected it to do. It can only be written from three
+// hours after the open — before that the morning has not happened yet, and a
+// "review" written mid-session is commentary on open positions. It is written
+// on the day or not at all: a review written tomorrow knows how today ended.
+model PriceActionReview {
+  id     Int  @id @default(autoincrement())
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // The trading day in the market's zone — not the trader's. The market
+  // defines the day; someone trading the New York open from Asia is still
+  // trading New York's Tuesday.
+  reviewDate     String
+  symbol         String // the broker's exact symbol, as on trades
+  marketTimezone String
+  marketOpenTime String
+
+  dayType        String // trend_up | trend_down | range | reversal | chop
+  summary        String // what price did
+  openBehavior   String?
+  keyLevels      String?
+  liquidityTaken String? // buy_side | sell_side | both | neither
+
+  // Did what the plan wanted to see actually happen? Required when a plan
+  // was written for the day; null when there was none to compare against.
+  planPlayedOut String? // yes | partly | no
+
+  // Was there a valid setup by the trader's own rules, whether or not it was
+  // taken? Separates "the market gave nothing" from "I missed it" and from
+  // "I traded something that was not there".
+  validSetup Boolean
+
+  lesson      String?
+  screenshots String[] @default([])
+
+  writtenAt    DateTime  @default(now())
+  lastEditedAt DateTime?
+
+  @@unique([userId, reviewDate, symbol])
+  @@index([userId, reviewDate])
 }

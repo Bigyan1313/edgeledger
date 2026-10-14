@@ -8,6 +8,7 @@ import profileRouter from './routes/profile.js'
 import chatRouter from './routes/chat.js'
 import extractRouter from './routes/extract.js'
 import sessionsRouter from './routes/sessions.js'
+import reviewsRouter from './routes/reviews.js'
 import { requireAuth } from './auth/middleware.js'
 
 const app = express()
@@ -34,6 +35,7 @@ app.use('/api/trades', requireAuth, tradesRouter)
 app.use('/api/accounts', requireAuth, accountsRouter)
 app.use('/api/profile', requireAuth, profileRouter)
 app.use('/api/sessions', requireAuth, sessionsRouter)
+app.use('/api/reviews', requireAuth, reviewsRouter)
 app.use('/api/chat', requireAuth, chatRouter)
 
 // Anything a route handler could not answer for itself. Logged in full server

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, ArrowRight, ImageUp, Lock, OctagonX, ShieldAlert, X } from 'lucide-react'
 import { tradesApi } from '../api/trades.js'
-import { sessionsApi } from '../api/sessions.js'
+import { sessionsApi, sessionLabel } from '../api/sessions.js'
 import { accountsApi } from '../api/accounts.js'
 import { money } from '../utils/money.js'
 import AccountSelector from './AccountSelector.jsx'
@@ -278,6 +278,7 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
             value={form.accountId}
             onChange={(id) => { set('accountId', id); if (!isAmending) onAccountChange?.(id) }}
             onAdd={onAddAccount}
+            onManage={onGoProfile}
           />
           {isAmending && (
             <button type="button" onClick={onCancelAmend}
@@ -612,7 +613,7 @@ function GateStrip({ gate, onGoSession }) {
       <div className="flex items-center justify-between gap-3 text-violet-soft">
         <span className="flex items-center gap-2 font-medium">
           <Lock size={14} strokeWidth={2.25} />
-          Plan locked · <span className="tnum">{session.tradesRemaining} of {session.maxTrades}</span> trade{session.maxTrades === 1 ? '' : 's'} left today
+          {sessionLabel(session.marketSession) ? `${sessionLabel(session.marketSession)} plan` : 'Plan'} locked · <span className="tnum">{session.tradesRemaining} of {session.maxTrades}</span> trade{session.maxTrades === 1 ? '' : 's'} left today
         </span>
         {link}
       </div>

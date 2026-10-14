@@ -1,11 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
+import { PROP_FIRMS } from '../constants/accounts.js'
 
-const PROP_FIRMS = [
-  'FTMO', 'FundedNext', 'The Funded Trader', 'MyFundedFX',
-  'E8 Markets', 'FunderPro', 'Alpha Capital', 'Topstep', 'Apex', 'Other',
-]
-
-export default function AccountSelector({ accounts, value, onChange, onAdd }) {
+export default function AccountSelector({ accounts, value, onChange, onAdd, onManage }) {
   const [open, setOpen] = useState(false)
   const [adding, setAdding] = useState(false)
   const ref = useRef(null)
@@ -92,6 +88,15 @@ export default function AccountSelector({ accounts, value, onChange, onAdd }) {
               >
                 + Add account
               </button>
+              {onManage && accounts.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => { setOpen(false); onManage() }}
+                  className="w-full px-3 py-2 text-left text-xs text-violet-soft hover:bg-surface-2"
+                >
+                  Manage accounts — edit names, balances, rules
+                </button>
+              )}
             </div>
           )}
         </div>

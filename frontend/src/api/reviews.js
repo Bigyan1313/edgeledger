@@ -1,11 +1,13 @@
 import { request } from './client.js'
 
-// The daily price action review. The server decides which day a review is
-// for, from the market's clock — there is no date to send.
+// The daily price action review. Without a date it is today's; a past
+// weekday can be sent for catching up or backtesting, and is recorded as such.
 export const reviewsApi = {
   today: () => request('/reviews/today'),
   list: ({ all = false } = {}) => request(`/reviews${all ? '?all=true' : ''}`),
   get: (id) => request(`/reviews/${id}`),
+  // One trading day: its plans and reviews. Past days can be caught up or backtested.
+  day: (date) => request(`/reviews/day/${date}`),
   create: (data) => request('/reviews', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/reviews/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 }

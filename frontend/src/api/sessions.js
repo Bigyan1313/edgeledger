@@ -16,7 +16,19 @@ export const sessionsApi = {
   // Readiness plus, if readiness passes, the plan. Locked once saved.
   create: (data) => request('/sessions', { method: 'POST', body: JSON.stringify({ timezone: browserTimezone(), ...data }) }),
   close: (id, data) => request(`/sessions/${id}/close`, { method: 'POST', body: JSON.stringify(data) }),
+  // Add-only: a locked plan's charts can grow, never shrink.
+  addCharts: (id, screenshots) => request(`/sessions/${id}/screenshots`, { method: 'POST', body: JSON.stringify({ screenshots }) }),
 }
+
+// The market sessions a plan can be for, with their usual hours in New York
+// time. A label on the day's one plan: the trade limit is per day, not per
+// session.
+export const MARKET_SESSIONS = [
+  { value: 'asia', label: 'Asia', hours: '7pm–4am ET' },
+  { value: 'london', label: 'London', hours: '3am–11:30am ET' },
+  { value: 'new_york', label: 'New York', hours: '9:30am–4pm ET' },
+]
+export const sessionLabel = (value) => MARKET_SESSIONS.find(s => s.value === value)?.label ?? null
 
 // Mirrors the server's ceiling. The server and the database both enforce it;
 // this only keeps the form from offering a choice that will be refused.

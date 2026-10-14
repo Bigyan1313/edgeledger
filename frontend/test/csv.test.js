@@ -254,6 +254,24 @@ test('a blocked day exports empty plan cells, never "null"', () => {
   assert.equal(row.blocked_reasons, 'Slept 4.5h — the floor is 6h.')
 })
 
+test('the session label and chart count travel with each session', () => {
+  const [row] = table(sessionsToCsv([{ ...OPEN_DAY, marketSession: 'new_york', screenshotCount: 2 }]))
+  assert.equal(row.market_session, 'new_york')
+  assert.equal(row.screenshot_count, '2')
+  assert.equal(table(sessionsToCsv([BLOCKED_DAY]))[0].market_session, '')
+})
+
+test('a review says whether it was a backtest, late, or edited after its day', () => {
+  const [row] = table(reviewsToCsv([{
+    id: 3, reviewDate: '2026-10-13', symbol: 'MNQZ6', marketTimezone: 'America/New_York', marketOpenTime: '09:30',
+    dayType: 'range', summary: 'Ranged inside the Asia session all morning.', validSetup: false,
+    isBacktest: false, writtenLate: true, editedAfterClose: true, writtenAt: '2026-10-15T14:00:00.000Z', lastEditedAt: '2026-10-16T14:00:00.000Z',
+  }]))
+  assert.equal(row.is_backtest, 'false')
+  assert.equal(row.written_late, 'true')
+  assert.equal(row.edited_after_close, 'true')
+})
+
 test('review columns are snake_case and export booleans and times plainly', () => {
   assert.ok(REVIEW_CSV_COLUMNS.every(c => !/[A-Z]/.test(c)))
   const [row] = table(reviewsToCsv([{

@@ -1,33 +1,48 @@
 import { useEffect, useState } from 'react'
 import {
-  CandlestickChart, Hourglass, CalendarCheck, Eye, GitBranch, OctagonX, Crosshair,
-  Layers, Droplets, Lightbulb, Target, Pencil, Plus, ImageUp, X, CheckCircle2,
+  CandlestickChart, Hourglass, CalendarCheck, CalendarSearch, Eye, GitBranch, OctagonX, Crosshair,
+  Layers, Droplets, Lightbulb, Target, Pencil, Plus, X, CheckCircle2, Clock, FlaskConical, ArrowLeft,
 } from 'lucide-react'
-import {
-  reviewsApi, DAY_TYPES, LIQUIDITY_TAKEN, PLAN_OUTCOMES, MIN_SUMMARY, MAX_REVIEW_SCREENSHOTS,
-} from '../api/reviews.js'
-import { fileToCompressedDataUrl } from '../utils/image.js'
+import { reviewsApi, DAY_TYPES, LIQUIDITY_TAKEN, PLAN_OUTCOMES, MIN_SUMMARY, MAX_REVIEW_SCREENSHOTS } from '../api/reviews.js'
+import { sessionLabel } from '../api/sessions.js'
+import ChartPicker, { Thumb } from './ChartPicker.jsx'
 
 // The daily price action review: what the market did, written once the
 // morning has played out and set beside what the plan expected.
 //
-// The server owns the window. This screen only shows it — a countdown before
-// it opens, the form while it is open — and never offers a date to write for.
+// Today's review opens three hours after the open; the server owns that
+// window, and this screen shows it. Past days can be opened too — from the
+// ten-day strip, the date picker, or the list of past reviews — to catch up a
+// missed day or to backtest an old one. Anything written after its day closed
+// is shown as late, and an edit after the close as "edited later", with when.
 
 export default function PriceActionReview({ onChanged }) {
   const [data, setData] = useState(null)
+  const [history, setHistory] = useState([])
   const [error, setError] = useState(null)
   const [version, setVersion] = useState(0)
   const [editing, setEditing] = useState(null) // a saved review, or 'new'
   const [now, setNow] = useState(() => Date.now())
+  // A past day being viewed, or null for today.
+  const [selected, setSelected] = useState(null)
+  const [day, setDay] = useState(null)
 
   useEffect(() => {
     let cancelled = false
-    reviewsApi.today()
-      .then(d => { if (!cancelled) { setData(d); setError(null) } })
+    Promise.all([reviewsApi.today(), reviewsApi.list()])
+      .then(([d, list]) => { if (!cancelled) { setData(d); setHistory(list); setError(null) } })
       .catch(err => { if (!cancelled) setError(err.message) })
     return () => { cancelled = true }
   }, [version])
+
+  useEffect(() => {
+    if (!selected) return
+    let cancelled = false
+    reviewsApi.day(selected)
+      .then(d => { if (!cancelled) setDay(d) })
+      .catch(err => { if (!cancelled) setDay({ date: selected, error: err.message }) })
+    return () => { cancelled = true }
+  }, [selected, version])
 
   // The countdown ticks, and the screen reloads itself the moment the window
   // opens rather than waiting for the trader to notice.
@@ -43,59 +58,153 @@ export default function PriceActionReview({ onChanged }) {
   }, [data])
 
   const saved = () => { setEditing(null); setVersion(v => v + 1); onChanged?.() }
+  const pick = (date) => {
+    setEditing(null)
+    setSelected(!date || date === data?.window.reviewDate ? null : date)
+  }
 
   if (error) return <Shell><Notice tone="loss">{error}</Notice></Shell>
   if (!data) return <Shell><p className="text-sm text-muted">Loading today…</p></Shell>
 
   const { window, reviews, plans, planExists, recentDays, lastSymbol } = data
-  const isOpen = window.state === 'open'
-  // A blank form when nothing is written yet, or when asked for another symbol.
-  const writingNew = isOpen && (editing === 'new' || (editing === null && reviews.length === 0))
-  const offerAnother = isOpen && editing === null && reviews.length > 0
+  const viewingPast = selected !== null
+  const past = viewingPast && day?.date === selected ? day : null
 
   return (
     <Shell window={window}>
-      <RecentDays days={recentDays} />
+      <RecentDays days={recentDays} selected={selected ?? window.reviewDate} onPick={pick} />
+      <DayPicker today={window.reviewDate} value={selected ?? ''} onPick={pick} />
 
-      {window.state === 'weekend' && (
-        <section className="card p-6 text-sm text-faint">Markets are closed today. No price action to review.</section>
+      {!viewingPast && (
+        <>
+          {window.state === 'weekend' && (
+            <section className="card p-6 text-sm text-faint">Markets are closed today. Pick a past day above to catch up or backtest.</section>
+          )}
+          {window.state === 'not_yet' && (
+            <section className="card p-6 space-y-2">
+              <p className="text-base font-semibold text-bright flex items-center gap-2">
+                <Hourglass size={18} strokeWidth={2} className="text-violet-soft" />
+                Opens at {clock(window.opensAt, window.marketTimezone)}{' '}
+                <span className="text-muted font-normal text-sm tnum">— in {until(window.opensAt, now)}</span>
+              </p>
+              <p className="text-sm text-muted">
+                Three hours after the {window.marketOpenTime} open. Let the morning play out — a review
+                written with positions open is commentary, not review.
+              </p>
+            </section>
+          )}
+          {window.state === 'open' && (
+            <DayReviews reviews={reviews} plans={plans} planExists={planExists} reviewDate={null}
+              lastSymbol={lastSymbol} editing={editing} setEditing={setEditing} onSaved={saved} />
+          )}
+          {window.state !== 'open' && plans.length > 0 && <PlanReference plans={plans} title="Today's plan" />}
+        </>
       )}
 
-      {window.state === 'not_yet' && (
-        <section className="card p-6 space-y-2">
-          <p className="text-base font-semibold text-bright flex items-center gap-2">
-            <Hourglass size={18} strokeWidth={2} className="text-violet-soft" />
-            Opens at {clock(window.opensAt, window.marketTimezone)}{' '}
-            <span className="text-muted font-normal text-sm tnum">— in {until(window.opensAt, now)}</span>
-          </p>
-          <p className="text-sm text-muted">
-            Three hours after the {window.marketOpenTime} open. Let the morning play out — a review
-            written with positions open is commentary, not review.
-          </p>
-        </section>
+      {viewingPast && (
+        <>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-sm text-bright font-medium">{formatDay(selected)} <span className="text-muted font-normal">· past day</span></p>
+            <button type="button" onClick={() => pick(null)}
+              className="text-sm text-violet-soft hover:text-bright inline-flex items-center gap-1.5 transition-colors">
+              <ArrowLeft size={14} strokeWidth={2.25} /> Back to today
+            </button>
+          </div>
+          {!past && <p className="text-sm text-muted">Loading {formatDay(selected)}…</p>}
+          {past?.error && <Notice tone="loss">{past.error}</Notice>}
+          {past && !past.error && past.state === 'weekend' && (
+            <section className="card p-6 text-sm text-faint">That was a weekend — no price action to review.</section>
+          )}
+          {past && !past.error && past.state === 'past' && (
+            <>
+              <p className="text-xs text-muted">
+                Written now, a review of this day is marked <b className="text-warn">late</b> — or tick backtest
+                if it is practice on an old day. Neither counts as reviewed on time.
+              </p>
+              <DayReviews reviews={past.reviews} plans={past.plans} planExists={past.planExists} reviewDate={selected}
+                lastSymbol={lastSymbol} editing={editing} setEditing={setEditing} onSaved={saved} />
+            </>
+          )}
+        </>
       )}
 
-      {isOpen && reviews.map(r => (
+      <PastReviews reviews={history} onPick={pick} />
+    </Shell>
+  )
+}
+
+// The reviews already written for one day, and the form for another. Shared
+// by today and by any past day; `reviewDate` is null for today.
+function DayReviews({ reviews, plans, planExists, reviewDate, lastSymbol, editing, setEditing, onSaved }) {
+  const writingNew = editing === 'new' || (editing === null && reviews.length === 0)
+  const offerAnother = editing === null && reviews.length > 0
+  return (
+    <>
+      {reviews.map(r => (
         editing?.id === r.id
-          ? <ReviewForm key={r.id} review={r} plans={plans} planExists={planExists} onSaved={saved} onCancel={() => setEditing(null)} />
+          ? <ReviewForm key={r.id} review={r} plans={plans} planExists={planExists} onSaved={onSaved} onCancel={() => setEditing(null)} />
           : <SavedReview key={r.id} review={r} onEdit={() => setEditing(r)} />
       ))}
-
       {writingNew && (
-        <ReviewForm key="new" plans={plans} planExists={planExists} defaultSymbol={reviews.length ? '' : (lastSymbol ?? '')}
-          onSaved={saved} onCancel={reviews.length ? () => setEditing(null) : null} />
+        <ReviewForm key={`new-${reviewDate ?? 'today'}`} plans={plans} planExists={planExists} reviewDate={reviewDate}
+          defaultSymbol={reviews.length ? '' : (lastSymbol ?? '')}
+          onSaved={onSaved} onCancel={reviews.length ? () => setEditing(null) : null} />
       )}
-
       {offerAnother && (
         <button type="button" onClick={() => setEditing('new')}
           className="w-full py-2.5 rounded-xl border border-line bg-surface-2 text-faint hover:text-bright hover:bg-surface-3 transition-colors flex items-center justify-center gap-2">
           <Plus size={15} strokeWidth={2.25} /> Review another symbol
         </button>
       )}
-
-      {!isOpen && plans.length > 0 && <PlanReference plans={plans} title="Today's plan" />}
-    </Shell>
+    </>
   )
+}
+
+function DayPicker({ today, value, onPick }) {
+  return (
+    <label className="flex items-center gap-2 text-sm text-faint">
+      <CalendarSearch size={15} strokeWidth={2} className="text-muted" />
+      <span>Open another day</span>
+      <input type="date" max={today} value={value} onChange={e => onPick(e.target.value || null)}
+        aria-label="Open another day"
+        className="bg-surface-2 border border-line rounded-lg px-2 py-1 text-sm text-bright focus:outline-none focus:border-violet-soft/70 [color-scheme:dark]" />
+    </label>
+  )
+}
+
+function PastReviews({ reviews, onPick }) {
+  if (!reviews.length) return null
+  return (
+    <section>
+      <h3 className="text-sm font-medium text-faint mb-2">Past reviews</h3>
+      <div className="card divide-y divide-line-soft overflow-hidden">
+        {reviews.slice(0, 20).map(r => (
+          <button key={r.id} type="button" onClick={() => onPick(r.reviewDate)}
+            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left hover:bg-surface-2/60 transition-colors">
+            <span className="text-faint tnum shrink-0 w-24 sm:w-28">{formatDay(r.reviewDate)}</span>
+            <span className="text-bright shrink-0">{r.symbol}</span>
+            {/* The day type gives way on a phone so the flags never get clipped. */}
+            <span className="text-muted truncate flex-1 min-w-0 hidden sm:block">{DAY_TYPES.find(d => d.value === r.dayType)?.label}</span>
+            <ReviewFlags review={r} compact />
+          </button>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+// Late, backtest, and edited-later — derived by the server from when the
+// review was written and changed, so they read the same everywhere.
+function ReviewFlags({ review, compact = false }) {
+  const items = []
+  if (review.isBacktest) items.push(<Pill key="b" tone="violet"><FlaskConical size={11} strokeWidth={2.5} className="inline -mt-0.5 mr-1" />backtest</Pill>)
+  else if (review.writtenLate) items.push(<Pill key="l" tone="warn"><Clock size={11} strokeWidth={2.5} className="inline -mt-0.5 mr-1" />written late</Pill>)
+  if (review.editedAfterClose) {
+    items.push(<Pill key="e" tone="warn">edited later{compact ? '' : ` · ${stamp(review.lastEditedAt)}`}</Pill>)
+  }
+  return items.length
+    ? <span className={`flex items-center gap-1.5 flex-wrap ${compact ? 'ml-auto min-w-0 justify-end' : 'shrink-0'}`}>{items}</span>
+    : null
 }
 
 function Shell({ window, children }) {
@@ -108,7 +217,7 @@ function Shell({ window, children }) {
         </h2>
         <p className="text-xs text-muted mt-1 tnum">
           {window
-            ? `${formatDay(window.reviewDate)} · ${window.marketOpenTime} open, ${window.marketTimezone} · written ${clock(window.opensAt, window.marketTimezone)} to midnight`
+            ? `${formatDay(window.reviewDate)} · ${window.marketOpenTime} open, ${window.marketTimezone} · today's opens ${clock(window.opensAt, window.marketTimezone)}`
             : ' '}
         </p>
       </div>
@@ -119,7 +228,7 @@ function Shell({ window, children }) {
 
 // --- the form ------------------------------------------------------------------
 
-function ReviewForm({ review = null, plans, planExists, defaultSymbol = '', onSaved, onCancel }) {
+function ReviewForm({ review = null, plans, planExists, reviewDate = null, defaultSymbol = '', onSaved, onCancel }) {
   const [form, setForm] = useState(() => ({
     symbol: review?.symbol ?? defaultSymbol,
     dayType: review?.dayType ?? null,
@@ -132,8 +241,9 @@ function ReviewForm({ review = null, plans, planExists, defaultSymbol = '', onSa
     lesson: review?.lesson ?? '',
     screenshots: review?.screenshots ?? [],
   }))
+  // Only a new review of a past day can be a backtest; the mark is fixed once saved.
+  const [isBacktest, setIsBacktest] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [processing, setProcessing] = useState(false)
   const [error, setError] = useState(null)
   const [fieldErrors, setFieldErrors] = useState({})
 
@@ -142,26 +252,13 @@ function ReviewForm({ review = null, plans, planExists, defaultSymbol = '', onSa
     setFieldErrors(fe => { const n = { ...fe }; delete n[field]; return n })
   }
 
-  const addCharts = async (files) => {
-    const room = MAX_REVIEW_SCREENSHOTS - form.screenshots.length
-    if (room <= 0) return
-    setProcessing(true)
-    try {
-      const urls = []
-      for (const file of Array.from(files).slice(0, room)) urls.push(await fileToCompressedDataUrl(file))
-      setForm(f => ({ ...f, screenshots: [...f.screenshots, ...urls].slice(0, MAX_REVIEW_SCREENSHOTS) }))
-    } catch (err) {
-      setError(err.message || 'Could not add that image')
-    } finally {
-      setProcessing(false)
-    }
-  }
-
   const submit = async () => {
     setSaving(true); setError(null); setFieldErrors({})
     try {
       const payload = { ...form, planPlayedOut: planExists ? form.planPlayedOut : null }
-      onSaved(review ? await reviewsApi.update(review.id, payload) : await reviewsApi.create(payload))
+      onSaved(review
+        ? await reviewsApi.update(review.id, payload)
+        : await reviewsApi.create({ ...payload, ...(reviewDate ? { reviewDate, isBacktest } : {}) }))
     } catch (err) {
       const fe = Object.fromEntries((err.fieldErrors ?? []).map(f => [f.field, f.message]))
       setFieldErrors(fe)
@@ -235,26 +332,18 @@ function ReviewForm({ review = null, plans, planExists, defaultSymbol = '', onSa
       </Field>
 
       <Field label="Charts" hint={`up to ${MAX_REVIEW_SCREENSHOTS}`} error={fieldErrors.screenshots}>
-        <div className="flex flex-wrap gap-3">
-          {form.screenshots.map((src, i) => (
-            <div key={i} className="relative w-28 h-20 rounded-xl overflow-hidden border border-line">
-              <img src={src} alt={`Chart ${i + 1}`} className="w-full h-full object-cover" />
-              <button type="button" aria-label={`Remove chart ${i + 1}`}
-                onClick={() => set('screenshots', form.screenshots.filter((_, idx) => idx !== i))}
-                className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/70 text-white flex items-center justify-center hover:bg-loss">
-                <X size={13} strokeWidth={2.5} />
-              </button>
-            </div>
-          ))}
-          {form.screenshots.length < MAX_REVIEW_SCREENSHOTS && (
-            <label className="w-28 h-20 rounded-xl border border-dashed border-line-soft bg-surface-2/40 text-muted hover:text-violet-soft hover:border-violet-soft/60 flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors">
-              <ImageUp size={18} strokeWidth={2} />
-              <span className="text-[11px]">{processing ? 'Adding…' : 'Add chart'}</span>
-              <input type="file" accept="image/*" multiple className="hidden" onChange={e => { addCharts(e.target.files); e.target.value = '' }} />
-            </label>
-          )}
-        </div>
+        <ChartPicker value={form.screenshots} onChange={v => set('screenshots', v)} max={MAX_REVIEW_SCREENSHOTS} />
       </Field>
+
+      {reviewDate && !review && (
+        <label className="flex items-start gap-2.5 rounded-xl border border-violet/30 bg-violet/[0.07] px-3 py-2.5 cursor-pointer">
+          <input type="checkbox" checked={isBacktest} onChange={e => setIsBacktest(e.target.checked)} className="w-4 h-4 mt-0.5 accent-violet" />
+          <span className="text-sm">
+            <span className="text-bright font-medium">This is a backtest</span>
+            <span className="block text-xs text-muted">Practice on an old day. Kept with your reviews, never counted toward the daily record.</span>
+          </span>
+        </label>
+      )}
 
       {/* Counted live: fixing a field shrinks it, fixing the last one clears it. */}
       {Object.keys(fieldErrors).length > 0 && (
@@ -264,11 +353,15 @@ function ReviewForm({ review = null, plans, planExists, defaultSymbol = '', onSa
       )}
       {error && <Notice tone="loss">{error}</Notice>}
 
-      <button type="button" disabled={saving || processing} onClick={submit}
+      <button type="button" disabled={saving} onClick={submit}
         className="w-full py-3 bg-violet hover:brightness-110 disabled:opacity-50 text-white font-semibold rounded-xl shadow-[0_10px_30px_-12px_rgb(90_84_232/0.85)] transition">
-        {saving ? 'Saving…' : review ? 'Save changes' : "Save today's review"}
+        {saving ? 'Saving…' : review ? 'Save changes' : reviewDate ? `Save review of ${formatDay(reviewDate)}` : "Save today's review"}
       </button>
-      <p className="text-xs text-muted text-center -mt-2">Editable until midnight in the market. After that it is closed.</p>
+      <p className="text-xs text-muted text-center -mt-2">
+        {review?.writtenLate || reviewDate
+          ? 'Saved with when it was written. Edits stay possible, and an edit after the day closed shows as edited later.'
+          : 'Edits after midnight in the market stay possible, and show as edited later.'}
+      </p>
     </section>
   )
 }
@@ -285,6 +378,7 @@ function SavedReview({ review, onEdit }) {
           <Pill>{label(DAY_TYPES, review.dayType)}</Pill>
           {review.planPlayedOut && <Pill tone={review.planPlayedOut === 'yes' ? 'gain' : review.planPlayedOut === 'no' ? 'loss' : 'warn'}>plan: {review.planPlayedOut}</Pill>}
           <Pill tone={review.validSetup ? 'gain' : 'muted'}>{review.validSetup ? 'valid setup' : 'no valid setup'}</Pill>
+          <ReviewFlags review={review} />
         </div>
         <button type="button" onClick={onEdit}
           className="text-sm text-muted hover:text-bright inline-flex items-center gap-1.5 transition-colors shrink-0">
@@ -302,11 +396,7 @@ function SavedReview({ review, onEdit }) {
       {review.lesson && <Block icon={Lightbulb} label="Lesson">{review.lesson}</Block>}
       {review.screenshots?.length > 0 && (
         <div className="flex flex-wrap gap-3">
-          {review.screenshots.map((src, i) => (
-            <a key={i} href={src} target="_blank" rel="noreferrer" className="w-28 h-20 rounded-xl overflow-hidden border border-line block">
-              <img src={src} alt={`Chart ${i + 1}`} className="w-full h-full object-cover" />
-            </a>
-          ))}
+          {review.screenshots.map((src, i) => <Thumb key={i} src={src} alt={`Chart ${i + 1}`} />)}
         </div>
       )}
     </section>
@@ -319,7 +409,9 @@ function PlanReference({ plans, title, flat = false }) {
       <p className="text-xs font-medium uppercase tracking-wider text-violet-soft">{title}</p>
       {plans.map(p => (
         <div key={p.id} className="space-y-2 text-sm">
-          {plans.length > 1 && <p className="text-xs text-muted">{p.account?.name ?? 'No account'}</p>}
+          {(plans.length > 1 || p.marketSession) && (
+            <p className="text-xs text-muted">{[plans.length > 1 && (p.account?.name ?? 'No account'), sessionLabel(p.marketSession) && `${sessionLabel(p.marketSession)} session`].filter(Boolean).join(' · ')}</p>
+          )}
           <p className="text-bright"><Eye size={13} strokeWidth={2.25} className="inline -mt-0.5 mr-1.5 text-muted" />{p.wantToSee}</p>
           <ul className="space-y-1">
             {p.scenarios.map((s, i) => (
@@ -337,9 +429,10 @@ function PlanReference({ plans, title, flat = false }) {
 }
 
 // Ten trading days, newest first. Missed is the word on purpose.
-function RecentDays({ days }) {
+function RecentDays({ days, selected, onPick }) {
   const style = {
     reviewed: 'bg-gain-bg text-gain border-gain/30',
+    late: 'bg-warn-bg text-warn border-warn/30',
     missed: 'bg-loss-bg/70 text-loss/90 border-loss/30',
     due: 'bg-violet/20 text-violet-soft border-violet/40',
     pending: 'bg-surface-2 text-muted border-line',
@@ -352,16 +445,18 @@ function RecentDays({ days }) {
       </p>
       <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
         {[...days].reverse().map(d => (
-          <div key={d.date} title={`${formatDay(d.date)} — ${d.status}`}
-            className={`rounded-lg border px-1 py-1.5 text-center ${style[d.status]}`}>
+          <button key={d.date} type="button" onClick={() => onPick(d.date)} title={`${formatDay(d.date)} — ${d.status}`}
+            aria-pressed={selected === d.date}
+            className={`rounded-lg border px-1 py-1.5 text-center transition hover:brightness-125 ${style[d.status]} ${selected === d.date ? 'ring-2 ring-violet-soft/70' : ''}`}>
             <div className="text-[10px] uppercase tracking-wide opacity-80">{weekday(d.date)}</div>
             <div className="text-xs font-semibold tnum">{Number(d.date.slice(8))}</div>
             <div className="h-3 flex items-center justify-center">
               {d.status === 'reviewed' && <CheckCircle2 size={11} strokeWidth={2.5} />}
               {d.status === 'missed' && <X size={11} strokeWidth={2.5} />}
               {d.status === 'due' && <span className="w-1.5 h-1.5 rounded-full bg-violet-soft" />}
+              {d.status === 'late' && <Clock size={11} strokeWidth={2.5} />}
             </div>
-          </div>
+          </button>
         ))}
       </div>
     </div>
@@ -385,8 +480,9 @@ function Pill({ tone = 'muted', children }) {
     loss: 'bg-loss-bg text-loss border-loss/30',
     warn: 'bg-warn-bg text-warn border-warn/30',
     muted: 'bg-surface-2 text-faint border-line',
+    violet: 'bg-violet/15 text-violet-soft border-violet/40',
   }
-  return <span className={`text-xs px-2 py-0.5 rounded-full border ${tones[tone]}`}>{children}</span>
+  return <span className={`text-xs px-2 py-0.5 rounded-full border whitespace-nowrap ${tones[tone]}`}>{children}</span>
 }
 
 function Notice({ tone, children }) {
@@ -425,6 +521,9 @@ function Segmented({ options, value, onChange, wrap = false }) {
 
 const clock = (iso, timeZone) =>
   new Intl.DateTimeFormat(undefined, { timeZone, hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date(iso))
+
+const stamp = (iso) =>
+  new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
 function until(iso, now) {
   const mins = Math.max(0, Math.ceil((new Date(iso).getTime() - now) / 60000))

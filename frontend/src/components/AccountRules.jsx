@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ShieldAlert } from 'lucide-react'
 import { accountsApi, DRAWDOWN_TYPES } from '../api/accounts.js'
 import { money } from '../utils/money.js'
+import { PROP_FIRMS } from '../constants/accounts.js'
 
 // Each account's loss rules, as the firm states them. The journal uses them
 // to say, at entry, how far the account is from being lost.
@@ -11,11 +12,11 @@ export default function AccountRules({ accounts, onUpdated }) {
     <section className="max-w-2xl mx-auto mt-10 space-y-4">
       <div>
         <h2 className="text-lg font-semibold text-bright tracking-tight flex items-center gap-2">
-          <ShieldAlert size={18} strokeWidth={2} className="text-violet-soft" /> Account rules
+          <ShieldAlert size={18} strokeWidth={2} className="text-violet-soft" /> Accounts
         </h2>
         <p className="text-xs text-muted mt-1">
-          Enter each firm's loss rules once. Log Trade then shows how far the account is from being
-          lost — and what the trade you are about to take would leave.
+          Each account's details and its firm's loss rules. Log Trade uses the rules to show how far the
+          account is from being lost — and what the trade you are about to take would leave.
         </p>
       </div>
       {accounts.map(a => <AccountCard key={a.id} account={a} onUpdated={onUpdated} />)}
@@ -24,6 +25,9 @@ export default function AccountRules({ accounts, onUpdated }) {
 }
 
 const toForm = (a) => ({
+  name: a.name ?? '',
+  mode: a.mode ?? 'Live',
+  propFirm: a.propFirm ?? '',
   startingBalance: a.startingBalance ?? '',
   dailyLossLimit: a.dailyLossLimit ?? '',
   maxDrawdown: a.maxDrawdown ?? '',
@@ -78,6 +82,24 @@ function AccountCard({ account, onUpdated }) {
         <StandingLine standing={standing} />
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <Field label="Name" error={fieldErrors.name}>
+          <input value={form.name} onChange={e => set('name', e.target.value)} className={inputCls(fieldErrors.name)} />
+        </Field>
+        <Field label="Mode" error={fieldErrors.mode}>
+          <select value={form.mode} onChange={e => set('mode', e.target.value)} className={inputCls(fieldErrors.mode)}>
+            <option value="Live">Live</option>
+            <option value="Demo">Demo / prop</option>
+          </select>
+        </Field>
+        {form.mode === 'Demo' && (
+          <Field label="Prop firm" error={fieldErrors.propFirm}>
+            <input list={`firms-${account.id}`} value={form.propFirm} onChange={e => set('propFirm', e.target.value)}
+              placeholder="e.g. Lucid Trading" className={inputCls(fieldErrors.propFirm)} />
+            <datalist id={`firms-${account.id}`}>{PROP_FIRMS.map(f => <option key={f} value={f} />)}</datalist>
+          </Field>
+        )}
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <Field label="Starting balance" error={fieldErrors.startingBalance}>
           <Dollar value={form.startingBalance} onChange={v => set('startingBalance', v)} placeholder="50000" error={fieldErrors.startingBalance} />
         </Field>
@@ -106,7 +128,7 @@ function AccountCard({ account, onUpdated }) {
       <div className="flex items-center gap-3">
         <button type="button" onClick={save} disabled={saving}
           className="px-4 py-2 rounded-xl bg-violet text-white text-sm font-semibold hover:brightness-110 disabled:opacity-50 transition">
-          {saving ? 'Saving…' : 'Save rules'}
+          {saving ? 'Saving…' : 'Save'}
         </button>
         {saved && <span className="text-sm text-gain">Saved</span>}
       </div>

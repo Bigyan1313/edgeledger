@@ -16,6 +16,7 @@ import SessionPlan from './components/SessionPlan.jsx'
 import PriceActionReview from './components/PriceActionReview.jsx'
 import EdgeChat from './components/EdgeChat.jsx'
 import AccountRules from './components/AccountRules.jsx'
+import Home from './components/Home.jsx'
 import TradovateImport from './components/TradovateImport.jsx'
 import { FileUp } from 'lucide-react'
 import AuthScreen from './components/AuthScreen.jsx'
@@ -25,7 +26,8 @@ import ExportButtons from './components/ExportButtons.jsx'
 
 export default function App() {
   const { user, logout } = useAuth()
-  const [tab, setTab] = useState('dashboard')
+  // Home first: the day at a glance, and where the logo leads.
+  const [tab, setTab] = useState('home')
   const [trades, setTrades] = useState([])
   const [accounts, setAccounts] = useState([])
   const [profile, setProfile] = useState(null)
@@ -182,7 +184,11 @@ export default function App() {
 
         {!error && (
           <>
-            {tab === 'dashboard' && <Dashboard trades={trades} accounts={accounts} />}
+            {tab === 'home' && (
+              <Home user={user} profile={profile} accounts={accounts} trades={trades} onGo={handleNavChange} />
+            )}
+
+            {tab === 'dashboard' && <Dashboard trades={trades} accounts={accounts} onGo={handleNavChange} />}
 
             {tab === 'log' && (
               stageBTrade ? (
@@ -257,6 +263,7 @@ export default function App() {
               <SessionPlan
                 accounts={accounts}
                 onAddAccount={handleAddAccount}
+                onManageAccounts={() => handleNavChange('profile')}
                 activeAccountId={activeAccountId}
                 onAccountChange={setActiveAccountId}
                 onGoLog={(accountId) => { setActiveAccountId(accountId); setTab('log') }}

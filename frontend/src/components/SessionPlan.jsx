@@ -4,7 +4,8 @@ import {
   CheckCircle2, XCircle, ShieldAlert, ArrowRight, ClipboardCheck,
 } from 'lucide-react'
 import AccountSelector from './AccountSelector.jsx'
-import { sessionsApi, MAX_TRADES_CEILING, MIN_PLAN_TEXT, MAX_SCENARIOS } from '../api/sessions.js'
+import { sessionsApi, MAX_TRADES_CEILING, MIN_PLAN_TEXT, MAX_SCENARIOS, MARKET_SESSIONS, sessionLabel } from '../api/sessions.js'
+import ChartPicker, { Thumb } from './ChartPicker.jsx'
 
 // The pre-session journal. Written before the open, locked once saved.
 //
@@ -15,7 +16,7 @@ import { sessionsApi, MAX_TRADES_CEILING, MIN_PLAN_TEXT, MAX_SCENARIOS } from '.
 
 const EMPTY_SCENARIO = { if: '', then: '' }
 
-export default function SessionPlan({ accounts, onAddAccount, onGoLog, activeAccountId, onAccountChange }) {
+export default function SessionPlan({ accounts, onAddAccount, onManageAccounts, onGoLog, activeAccountId, onAccountChange }) {
   const [accountId, setAccountIdState] = useState(activeAccountId ?? accounts[0]?.id ?? null)
   const setAccountId = (id) => { setAccountIdState(id); onAccountChange?.(id) }
   // Each load is tagged with the account it was for, so switching accounts
@@ -53,7 +54,7 @@ export default function SessionPlan({ accounts, onAddAccount, onGoLog, activeAcc
             {ctx ? `${formatDay(ctx.today)} · ${ctx.timezone}` : ' '}
           </p>
         </div>
-        <AccountSelector accounts={accounts} value={accountId} onChange={setAccountId} onAdd={onAddAccount} />
+        <AccountSelector accounts={accounts} value={accountId} onChange={setAccountId} onAdd={onAddAccount} onManage={onManageAccounts} />
       </div>
 
       {error && <Notice tone="loss">{error}</Notice>}
@@ -76,7 +77,7 @@ export default function SessionPlan({ accounts, onAddAccount, onGoLog, activeAcc
 function PreSessionForm({ ctx, accountId, onSaved }) {
   const [sleepHours, setSleepHours] = useState('')
   const [fitToTrade, setFitToTrade] = useState(null)
-  const [plan, setPlan] = useState({ bias: null, wantToSee: '', noTradeIf: '', scenarios: [{ ...EMPTY_SCENARIO }], maxTrades: null })
+  const [plan, setPlan] = useState({ marketSession: null, bias: null, wantToSee: '', noTradeIf: '', scenarios: [{ ...EMPTY_SCENARIO }], maxTrades: null, screenshots: [] })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [fieldErrors, setFieldErrors] = useState({})
@@ -104,6 +105,8 @@ function PreSessionForm({ ctx, accountId, onSaved }) {
         bias: plan.bias,
         wantToSee: plan.wantToSee,
         noTradeIf: plan.noTradeIf,
+        marketSession: plan.marketSession,
+        screenshots: plan.screenshots,
         scenarios: plan.scenarios.filter(s => s.if.trim() || s.then.trim()),
         maxTrades: plan.maxTrades,
       })
@@ -172,6 +175,16 @@ function PreSessionForm({ ctx, accountId, onSaved }) {
         <section className="card p-6 space-y-5">
           <StepTitle n={2} title="The plan" hint="Locked once saved. No edits, no delete." />
 
+          <Field label="Session" error={fieldErrors.marketSession}
+            hint="the day's limit is shared across sessions">
+            <Segmented
+              options={MARKET_SESSIONS.map(m => ({ value: m.value, label: m.label }))}
+              value={plan.marketSession} onChange={v => setP('marketSession', v)} />
+            <span className="text-[11px] text-muted">
+              {MARKET_SESSIONS.map(m => `${m.label} ${m.hours}`).join(' · ')}
+            </span>
+          </Field>
+
           <Field label="Bias" hint="optional" error={fieldErrors.bias}>
             <Segmented
               options={[{ value: 'long', label: 'Long' }, { value: 'short', label: 'Short' }, { value: 'neutral', label: 'Neutral' }]}
@@ -219,6 +232,10 @@ function PreSessionForm({ ctx, accountId, onSaved }) {
             <CharHint value={plan.noTradeIf} />
           </Field>
 
+          <Field label="Pre-market charts" hint="optional, up to 3" error={fieldErrors.screenshots}>
+            <ChartPicker value={plan.screenshots} onChange={v => setP('screenshots', v)} label="Add chart" />
+          </Field>
+
           <Field label="Most trades today" error={fieldErrors.maxTrades}
             hint={`${MAX_TRADES_CEILING} is the ceiling. It does not go higher.`}>
             <Segmented
@@ -253,17 +270,34 @@ function PreSessionForm({ ctx, accountId, onSaved }) {
 
 function OpenDay({ session, onSaved, onGoLog }) {
   const [closing, setClosing] = useState(false)
+  const [chartError, setChartError] = useState(null)
+
+  // Charts added after the plan was locked go straight to the server: there is
+  // nothing to confirm, and nothing already attached can be taken away.
+  const addCharts = async (urls) => {
+    setChartError(null)
+    try { onSaved(await sessionsApi.addCharts(session.id, urls)) } catch (err) { setChartError(err.message) }
+  }
   const capped = session.tradesLogged >= session.maxTrades
 
   return (
     <div className="space-y-6">
       <section className="card p-6 space-y-5">
         <div className="flex items-start justify-between gap-3">
-          <StatusPill tone="gain" icon={Lock}>Locked · open</StatusPill>
+          <div className="flex items-center gap-2 flex-wrap">
+            <StatusPill tone="gain" icon={Lock}>Locked · open</StatusPill>
+            <SessionTag value={session.marketSession} />
+          </div>
           <TradeMeter used={session.tradesLogged} max={session.maxTrades} />
         </div>
 
         <PlanBody session={session} />
+
+        <div>
+          <Label>Charts</Label>
+          <ChartPicker existing={session.screenshots ?? []} value={[]} onChange={addCharts} removable={false} label="Add chart" />
+          {chartError && <p className="text-xs text-red-400 mt-1">{chartError}</p>}
+        </div>
 
         {capped ? (
           <Notice tone="warn" icon={ShieldAlert}>
@@ -352,12 +386,20 @@ function ClosedDay({ session }) {
   return (
     <section className="card p-6 space-y-5">
       <div className="flex items-start justify-between gap-3">
-        <StatusPill tone={session.followedPlan ? 'gain' : 'warn'} icon={session.followedPlan ? CheckCircle2 : XCircle}>
-          Closed · {session.followedPlan ? 'followed the plan' : 'did not follow the plan'}
-        </StatusPill>
+        <div className="flex items-center gap-2 flex-wrap">
+          <StatusPill tone={session.followedPlan ? 'gain' : 'warn'} icon={session.followedPlan ? CheckCircle2 : XCircle}>
+            Closed · {session.followedPlan ? 'followed the plan' : 'did not follow the plan'}
+          </StatusPill>
+          <SessionTag value={session.marketSession} />
+        </div>
         <TradeMeter used={session.tradesLogged} max={session.maxTrades} />
       </div>
       <PlanBody session={session} />
+      {session.screenshots?.length > 0 && (
+        <div className="flex flex-wrap gap-3">
+          {session.screenshots.map((src, i) => <Thumb key={i} src={src} alt={`Chart ${i + 1}`} />)}
+        </div>
+      )}
       {session.review && (
         <div>
           <Label>Review</Label>
@@ -403,7 +445,9 @@ function RecentDays({ sessions }) {
         {sessions.slice(0, 14).map(s => (
           <div key={s.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
             <span className="text-faint tnum shrink-0 sm:w-28">{formatDay(s.sessionDate)}</span>
-            <span className="text-muted truncate flex-1 min-w-0">{s.account?.name ?? 'No account'}</span>
+            <span className="text-muted truncate flex-1 min-w-0">
+              {s.account?.name ?? 'No account'}{sessionLabel(s.marketSession) ? ` · ${sessionLabel(s.marketSession)}` : ''}
+            </span>
             <span className="tnum text-muted shrink-0 text-right">
               {s.status === 'blocked' ? '—' : `${s.tradesLogged}/${s.maxTrades}`}
             </span>
@@ -459,6 +503,12 @@ function TradeMeter({ used, max }) {
       </p>
     </div>
   )
+}
+
+function SessionTag({ value }) {
+  const label = sessionLabel(value)
+  if (!label) return null
+  return <span className="text-xs font-semibold px-2.5 py-1 rounded-full border border-violet/40 bg-violet/15 text-violet-soft">{label} session</span>
 }
 
 function StatusPill({ tone, icon: Icon, children }) {

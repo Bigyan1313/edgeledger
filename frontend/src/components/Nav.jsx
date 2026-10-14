@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import {
-  LayoutDashboard, ClipboardCheck, PlusCircle, List, CandlestickChart, Calculator, User, LogOut, MoreHorizontal,
+  Home, LayoutDashboard, ClipboardCheck, PlusCircle, List, CandlestickChart, Calculator, User, LogOut, MoreHorizontal,
 } from 'lucide-react'
 
 const TABS = [
-  { id: 'dashboard', label: 'Dashboard',   short: 'Home',    icon: LayoutDashboard },
+  // The day at a glance; also where the logo goes.
+  { id: 'home',      label: 'Home',        short: 'Home',    icon: Home },
+  { id: 'dashboard', label: 'Dashboard',   short: 'Stats',   icon: LayoutDashboard },
   // Before Log Trade, because that is the order they are used in.
   { id: 'session',   label: 'Session',     short: 'Session', icon: ClipboardCheck },
   { id: 'log',       label: 'Log Trade',   short: 'Log',     icon: PlusCircle },
@@ -17,8 +19,8 @@ const TABS = [
 
 // On a phone, the five used every trading day sit in a bottom bar within
 // thumb reach; the rest go behind More.
-const BAR = ['dashboard', 'session', 'log', 'history', 'review']
-const MORE = ['calc', 'profile']
+const BAR = ['home', 'session', 'log', 'history', 'review']
+const MORE = ['dashboard', 'calc', 'profile']
 
 export default function Nav({ active, onChange, user, onLogout, openCount = 0, reviewDue = false }) {
   const [moreOpen, setMoreOpen] = useState(false)
@@ -29,9 +31,10 @@ export default function Nav({ active, onChange, user, onLogout, openCount = 0, r
     <>
       <nav className="border-b border-line bg-ink/70 backdrop-blur-xl px-4 sm:px-6 flex items-center justify-between gap-3 sticky top-0 z-20 pt-[env(safe-area-inset-top)]">
         <div className="flex items-center gap-2 sm:gap-5 min-w-0">
-          <span className="text-[15px] font-semibold tracking-tight py-3.5 shrink-0">
+          <button type="button" onClick={() => go('home')} aria-label="EdgeLedger home"
+            className="text-[15px] font-semibold tracking-tight py-3.5 shrink-0 hover:opacity-90 transition-opacity">
             Edge<span className="text-emerald-400">Ledger</span>
-          </span>
+          </button>
 
           {/* The full tab row from the small breakpoint up. */}
           <div className="hidden sm:flex items-center gap-0.5 overflow-x-auto no-scrollbar">

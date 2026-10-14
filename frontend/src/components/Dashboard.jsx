@@ -3,6 +3,7 @@ import BalanceCard from './BalanceCard.jsx'
 import { RISKY_TECHNICAL_SETUPS } from '../constants/trade.js'
 import {
   TrendingUp, Target, Scale, Activity, AlertTriangle, LineChart, ShieldCheck, Layers,
+  PlusCircle, FileUp, ClipboardCheck, CalendarDays,
 } from 'lucide-react'
 
 // Stats are computed over CLOSED trades only. An open Stage A entry has no
@@ -59,16 +60,10 @@ function Stat({ label, value, sub, icon: Icon, color = 'text-bright' }) {
   )
 }
 
-export default function Dashboard({ trades, accounts = [] }) {
+export default function Dashboard({ trades, accounts = [], onGo }) {
   const s = computeStats(trades)
 
-  if (!s) {
-    return (
-      <div className="text-center py-16 text-gray-600">
-        Log your first trade to see stats.
-      </div>
-    )
-  }
+  if (!s) return <EmptyDashboard openCount={trades.filter(t => t.entryStage === 'pending_exit').length} onGo={onGo} />
 
   const fmt = (n, d = 2) => n == null ? '—' : n.toFixed(d)
 
@@ -287,5 +282,62 @@ function SetupTable({ trades }) {
         </tbody>
       </table>
     </div>
+  )
+}
+
+// Before the first closed trade there is nothing to compute, so say what will
+// be here and how to get it there — rather than a page of zeros.
+function EmptyDashboard({ openCount, onGo }) {
+  const coming = [
+    { icon: LineChart, title: 'Equity curve', text: 'Your running P&L, trade by trade.' },
+    { icon: CalendarDays, title: 'P&L calendar', text: 'Green and red days at a glance.' },
+    { icon: ShieldCheck, title: 'Discipline mirror', text: 'Results when you followed the checklist versus when you did not.' },
+    { icon: Target, title: 'Win rate, expectancy, R', text: 'Computed from closed trades, with futures priced per point.' },
+  ]
+  return (
+    <div className="max-w-3xl mx-auto space-y-6">
+      <section className="card p-6 sm:p-8 text-center space-y-3">
+        <div className="mx-auto w-12 h-12 rounded-2xl bg-violet/20 text-violet-soft flex items-center justify-center">
+          <LineChart size={24} strokeWidth={2} />
+        </div>
+        <h2 className="text-xl font-semibold text-bright tracking-tight">
+          {openCount ? 'No closed trades yet' : 'No trades yet'}
+        </h2>
+        <p className="text-sm text-faint max-w-md mx-auto">
+          {openCount
+            ? `You have ${openCount} open trade${openCount === 1 ? '' : 's'}. Stats start with the first close — add the exit in History, or import it from Tradovate.`
+            : 'Stats appear here once your first trade is closed. Log one before you enter, or import your Tradovate fills.'}
+        </p>
+        <div className="flex flex-wrap justify-center gap-2 pt-2">
+          {openCount
+            ? <EmptyAction primary icon={FileUp} label={`Close ${openCount === 1 ? 'it' : 'them'} in History`} onClick={() => onGo?.('history')} />
+            : <EmptyAction primary icon={PlusCircle} label="Log a trade" onClick={() => onGo?.('log')} />}
+          <EmptyAction icon={ClipboardCheck} label="Write today's plan" onClick={() => onGo?.('session')} />
+          {!openCount && <EmptyAction icon={FileUp} label="Import from Tradovate" onClick={() => onGo?.('history')} />}
+        </div>
+      </section>
+      <div className="grid sm:grid-cols-2 gap-3">
+        {coming.map(c => (
+          <div key={c.title} className="card px-4 py-3.5 flex items-start gap-3 opacity-80">
+            <c.icon size={18} strokeWidth={2} className="text-violet-soft mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-bright">{c.title}</p>
+              <p className="text-xs text-muted mt-0.5">{c.text}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function EmptyAction({ icon: Icon, label, onClick, primary = false }) {
+  return (
+    <button type="button" onClick={onClick}
+      className={`text-sm px-4 py-2 rounded-xl inline-flex items-center gap-1.5 transition ${
+        primary ? 'bg-violet text-white hover:brightness-110' : 'border border-line bg-surface-2 text-faint hover:text-bright hover:bg-surface-3'
+      }`}>
+      <Icon size={15} strokeWidth={2} /> {label}
+    </button>
   )
 }

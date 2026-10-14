@@ -154,6 +154,9 @@ const SESSION_COLUMNS = [
   ['account_id', s => s.accountId],
   ['account_name', s => s.account?.name],
   ['status', s => s.status],
+  // asia | london | new_york; empty on a blocked day and on plans from
+  // before the label existed.
+  ['market_session', s => s.marketSession],
   ['sleep_hours', s => s.sleepHours],
   ['fit_to_trade', s => s.fitToTrade],
   ['min_sleep_hours_applied', s => s.minSleepHoursApplied],
@@ -173,6 +176,7 @@ const SESSION_COLUMNS = [
   ['closed_at', s => s.closedAt],
   ['followed_plan', s => s.followedPlan],
   ['review', s => s.review],
+  ['screenshot_count', s => s.screenshotCount ?? s.screenshots?.length ?? 0],
 ]
 
 const REVIEW_COLUMNS = [
@@ -190,6 +194,11 @@ const REVIEW_COLUMNS = [
   ['valid_setup', r => r.validSetup],
   ['lesson', r => r.lesson],
   ['screenshot_count', r => r.screenshotCount ?? r.screenshots?.length ?? 0],
+  // When it was written relative to its day: a backtest is practice on an
+  // old day; written_late and edited_after_close are derived by the server.
+  ['is_backtest', r => r.isBacktest],
+  ['written_late', r => r.writtenLate],
+  ['edited_after_close', r => r.editedAfterClose],
   ['written_at', r => r.writtenAt],
   ['last_edited_at', r => r.lastEditedAt],
 ]

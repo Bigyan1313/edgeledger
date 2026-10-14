@@ -3,6 +3,7 @@ import { Download } from 'lucide-react'
 import { tradesApi } from './api/trades.js'
 import { accountsApi } from './api/accounts.js'
 import { profileApi } from './api/profile.js'
+import { reviewsApi } from './api/reviews.js'
 import { useAuth } from './auth/useAuth.js'
 import Nav from './components/Nav.jsx'
 import TradeForm from './components/TradeForm.jsx'
@@ -13,6 +14,7 @@ import Dashboard from './components/Dashboard.jsx'
 import Calculators from './components/Calculators.jsx'
 import Profile from './components/Profile.jsx'
 import SessionPlan from './components/SessionPlan.jsx'
+import PriceActionReview from './components/PriceActionReview.jsx'
 import AuthScreen from './components/AuthScreen.jsx'
 import WakingScreen from './components/WakingScreen.jsx'
 import { downloadCsv, selectExportRows } from './utils/csv.js'
@@ -41,6 +43,20 @@ export default function App() {
   // The account being worked on, shared by the Session and Log Trade tabs so a
   // trade logged "under this plan" starts on the plan's account.
   const [activeAccountId, setActiveAccountId] = useState(null)
+
+  // Whether today's price action review is open and unwritten — the dot on
+  // the Review tab. Checked on load, on every tab change, and after a save,
+  // so it appears once the window opens without needing a reload.
+  const [reviewDue, setReviewDue] = useState(false)
+  const [reviewCheck, setReviewCheck] = useState(0)
+  useEffect(() => {
+    if (!user) return
+    let cancelled = false
+    reviewsApi.today()
+      .then(d => { if (!cancelled) setReviewDue(d.recentDays[0]?.status === 'due') })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [user, reviewCheck])
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -129,6 +145,7 @@ export default function App() {
     if (newTab === 'session' && activeAccountId == null && accounts.length) {
       setActiveAccountId(accounts[0].id)
     }
+    setReviewCheck(c => c + 1)
     setTab(newTab)
   }
 
@@ -143,7 +160,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-ink text-bright">
-      <Nav active={tab} onChange={handleNavChange} user={{ ...user, displayName: profile?.displayName ?? user.displayName }} onLogout={logout} openCount={openCount} />
+      <Nav active={tab} onChange={handleNavChange} user={{ ...user, displayName: profile?.displayName ?? user.displayName }} onLogout={logout} openCount={openCount} reviewDue={reviewDue} />
 
       {/* The v2 trade table carries more columns than v1 did — broker linkage,
           both setup axes, stage, flags — so History gets a wider column than the
@@ -238,6 +255,8 @@ export default function App() {
                 onGoLog={(accountId) => { setActiveAccountId(accountId); setTab('log') }}
               />
             )}
+
+            {tab === 'review' && <PriceActionReview onChanged={() => setReviewCheck(c => c + 1)} />}
 
             {tab === 'calc' && <Calculators defaultRiskPercent={profile?.defaultRiskPercent} />}
 

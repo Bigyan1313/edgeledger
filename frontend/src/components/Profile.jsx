@@ -14,7 +14,7 @@ const COMMON_ZONES = [
 
 const EMPTY = {
   displayName: '', timezone: '', baseCurrency: '',
-  defaultBrokerPlatform: '', defaultBrokerAccountId: '', defaultRiskPercent: '', minSleepHours: '',
+  defaultBrokerPlatform: '', defaultBrokerAccountId: '', defaultRiskPercent: '', minSleepHours: '', marketOpenTime: '', marketTimezone: '',
 }
 
 export default function Profile({ onSaved }) {
@@ -40,6 +40,8 @@ export default function Profile({ onSaved }) {
           defaultBrokerAccountId: p.defaultBrokerAccountId ?? '',
           defaultRiskPercent: p.defaultRiskPercent ?? '',
           minSleepHours: p.minSleepHours ?? '',
+          marketOpenTime: p.marketOpenTime ?? '',
+          marketTimezone: p.marketTimezone ?? '',
         })
       })
       .catch(err => !cancelled && setError(err.message))
@@ -64,6 +66,8 @@ export default function Profile({ onSaved }) {
         ...form,
         defaultRiskPercent: form.defaultRiskPercent === '' ? null : Number(form.defaultRiskPercent),
         minSleepHours: form.minSleepHours === '' ? null : Number(form.minSleepHours),
+        marketOpenTime: form.marketOpenTime || null,
+        marketTimezone: form.marketTimezone.trim() || null,
       })
       setSaved(true)
       onSaved?.(updated)
@@ -158,6 +162,24 @@ export default function Profile({ onSaved }) {
             <input type="number" step="0.5" min="4" max="10" value={form.minSleepHours}
               onChange={e => set('minSleepHours', e.target.value)}
               placeholder="6" className={inputCls(fieldErrors.minSleepHours)} />
+          </Field>
+        </div>
+      </fieldset>
+
+      <fieldset className="space-y-4">
+        <legend className="text-sm font-medium text-gray-300 mb-1">Market open</legend>
+        <p className="text-xs text-muted -mt-1 mb-2">
+          The price action review opens three hours after this, in the market's own time.
+          Unset uses the New York cash open — 09:30 America/New_York.
+        </p>
+        <div className="grid sm:grid-cols-3 gap-4">
+          <Field label="Opens at" error={fieldErrors.marketOpenTime}>
+            <input type="time" value={form.marketOpenTime} onChange={e => set('marketOpenTime', e.target.value)}
+              className={inputCls(fieldErrors.marketOpenTime)} />
+          </Field>
+          <Field label="Market timezone" error={fieldErrors.marketTimezone}>
+            <input value={form.marketTimezone} onChange={e => set('marketTimezone', e.target.value)}
+              placeholder="America/New_York" className={inputCls(fieldErrors.marketTimezone)} />
           </Field>
         </div>
       </fieldset>

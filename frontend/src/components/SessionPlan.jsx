@@ -82,9 +82,18 @@ function PreSessionForm({ ctx, accountId, onSaved }) {
   const [fieldErrors, setFieldErrors] = useState({})
 
   const verdict = previewReadiness({ sleepHours, fitToTrade }, ctx.minSleepHours, ctx.blockedElsewhere)
-  const setP = (field, value) => setPlan(p => ({ ...p, [field]: value }))
-  const setScenario = (i, side, value) =>
+  // Editing a field clears its error, and the summary below is counted from
+  // what is still marked — so it shrinks as the plan is fixed.
+  const clearError = (...fields) => setFieldErrors(fe => {
+    const next = { ...fe }
+    for (const f of fields) delete next[f]
+    return next
+  })
+  const setP = (field, value) => { setPlan(p => ({ ...p, [field]: value })); clearError(field) }
+  const setScenario = (i, side, value) => {
     setPlan(p => ({ ...p, scenarios: p.scenarios.map((s, idx) => (idx === i ? { ...s, [side]: value } : s)) }))
+    clearError('scenarios', `scenarios.${i}`)
+  }
 
   const submit = async (blocked) => {
     setSaving(true); setError(null); setFieldErrors({})
@@ -100,8 +109,9 @@ function PreSessionForm({ ctx, accountId, onSaved }) {
       })
       onSaved(session)
     } catch (err) {
-      setError(err.message)
-      setFieldErrors(Object.fromEntries((err.fieldErrors ?? []).map(f => [f.field, f.message])))
+      const fe = Object.fromEntries((err.fieldErrors ?? []).map(f => [f.field, f.message]))
+      setFieldErrors(fe)
+      setError(Object.keys(fe).length ? null : err.message)
     } finally {
       setSaving(false)
     }
@@ -218,13 +228,12 @@ function PreSessionForm({ ctx, accountId, onSaved }) {
 
           {/* The fields carry their own messages; repeating all of them here
               just doubles the red. Only an error with no field is spelled out. */}
-          {error && (
+          {Object.keys(fieldErrors).length > 0 && (
             <Notice tone="loss">
-              {Object.keys(fieldErrors).length
-                ? `Fix the ${Object.keys(fieldErrors).length === 1 ? 'highlighted field' : `${Object.keys(fieldErrors).length} highlighted fields`} above.`
-                : error}
+              Fix the {Object.keys(fieldErrors).length === 1 ? 'highlighted field' : `${Object.keys(fieldErrors).length} highlighted fields`} above.
             </Notice>
           )}
+          {error && <Notice tone="loss">{error}</Notice>}
 
           <button type="button" disabled={saving} onClick={() => submit(false)}
             className="w-full py-3 bg-violet hover:brightness-110 disabled:opacity-50 text-white font-semibold rounded-xl shadow-[0_10px_30px_-12px_rgb(90_84_232/0.85)] transition flex items-center justify-center gap-2">

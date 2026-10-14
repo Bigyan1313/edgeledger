@@ -1,4 +1,4 @@
-import { LayoutDashboard, ClipboardCheck, PlusCircle, List, Calculator, User, LogOut } from 'lucide-react'
+import { LayoutDashboard, ClipboardCheck, PlusCircle, List, CandlestickChart, Calculator, User, LogOut } from 'lucide-react'
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard',   icon: LayoutDashboard },
@@ -6,11 +6,13 @@ const TABS = [
   { id: 'session',   label: 'Session',     icon: ClipboardCheck },
   { id: 'log',       label: 'Log Trade',   icon: PlusCircle },
   { id: 'history',   label: 'History',     icon: List },
+  // After the morning — three hours past the open.
+  { id: 'review',    label: 'Review',      icon: CandlestickChart },
   { id: 'calc',      label: 'Calculators', icon: Calculator },
   { id: 'profile',   label: 'Profile',     icon: User },
 ]
 
-export default function Nav({ active, onChange, user, onLogout, openCount = 0 }) {
+export default function Nav({ active, onChange, user, onLogout, openCount = 0, reviewDue = false }) {
   return (
     <nav className="border-b border-line bg-ink/70 backdrop-blur-xl px-4 sm:px-6 flex items-center justify-between gap-3 sticky top-0 z-20">
       <div className="flex items-center gap-2 sm:gap-5 min-w-0">
@@ -34,6 +36,10 @@ export default function Nav({ active, onChange, user, onLogout, openCount = 0 })
                 <span className="ml-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-violet/20 text-violet-soft align-middle tnum">
                   {openCount}
                 </span>
+              )}
+              {/* Today's review window is open and nothing is written yet. */}
+              {tab.id === 'review' && reviewDue && (
+                <span aria-label="Review due" className="w-1.5 h-1.5 rounded-full bg-violet-soft shadow-[0_0_8px_rgb(185_166_245/0.9)]" />
               )}
               {active === tab.id && (
                 <span className="absolute left-3 right-3 -bottom-px h-0.5 bg-violet-soft rounded-full" />

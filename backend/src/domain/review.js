@@ -65,13 +65,13 @@ function offsetMinutes(instant, timeZone) {
   return (asUtc - Math.floor(instant.getTime() / 1000) * 1000) / 60000
 }
 
-// 09:30 on a date in a zone, as the instant it happens. Two passes: the first
+// 09:30 (or 09:30:15) on a date in a zone, as the instant it happens. Two passes: the first
 // guesses with the offset at the wrong instant, the second corrects for an
 // offset that changed in between — which is what a daylight-saving date does.
 export function zonedTimeToInstant(ymd, hhmm, timeZone) {
   const [y, m, d] = ymd.split('-').map(Number)
-  const [hh, mm] = hhmm.split(':').map(Number)
-  const wall = Date.UTC(y, m - 1, d, hh, mm)
+  const [hh, mm, ss = 0] = hhmm.split(':').map(Number)
+  const wall = Date.UTC(y, m - 1, d, hh, mm, ss)
   let instant = wall - offsetMinutes(new Date(wall), timeZone) * 60000
   instant = wall - offsetMinutes(new Date(instant), timeZone) * 60000
   return new Date(instant)

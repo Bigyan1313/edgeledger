@@ -1,6 +1,6 @@
 // In production, Vercel sets VITE_API_URL to the Render backend URL (e.g.
 // https://edgeledger-api.onrender.com/api). Locally it falls back to the dev server.
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
+export const BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
 
 const TOKEN_KEY = 'edgeledger_token'
 const USER_KEY  = 'edgeledger_user'

@@ -6,7 +6,7 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   REVIEW_DELAY_MINUTES, DEFAULT_MARKET_OPEN_TIME, DEFAULT_MARKET_TIMEZONE, MAX_REVIEW_SCREENSHOTS,
-  zonedTimeToInstant, reviewWindow, isEditable, recentWeekdays, isWeekend,
+  zonedTimeToInstant, reviewWindow, reviewFlags, reviewDayState, dayRecordStatus, isValidDate, recentWeekdays, isWeekend,
   marketSettings, isValidMarketOpenTime, validateReview, coerceReview,
 } from '../src/domain/review.js'
 
@@ -88,11 +88,64 @@ describe('the review window', () => {
   })
 })
 
-describe('editing', () => {
-  const review = { reviewDate: '2026-10-14', marketTimezone: 'America/New_York' }
-  test('a review can be corrected until its own day ends in the market, and not after', () => {
-    assert.equal(isEditable(review, at('2026-10-15T03:59:59Z')), true)
-    assert.equal(isEditable(review, at('2026-10-15T04:00:00Z')), false)
+describe('when a review was written, relative to its day', () => {
+  const review = (writtenAt, lastEditedAt = null) => ({ reviewDate: '2026-10-14', marketTimezone: 'America/New_York', writtenAt, lastEditedAt })
+
+  test('written before midnight in the market is on time', () => {
+    const f = reviewFlags(review('2026-10-15T03:59:59Z'))
+    assert.equal(f.writtenLate, false)
+    assert.equal(f.closesAt.toISOString(), '2026-10-15T04:00:00.000Z')
+  })
+
+  test('written at or after the close is late', () => {
+    assert.equal(reviewFlags(review('2026-10-15T04:00:00Z')).writtenLate, true)
+  })
+
+  test('an edit after the close is marked; one before it is not', () => {
+    assert.equal(reviewFlags(review('2026-10-14T18:00:00Z', '2026-10-14T23:00:00Z')).editedAfterClose, false)
+    assert.equal(reviewFlags(review('2026-10-14T18:00:00Z', '2026-10-16T13:02:00Z')).editedAfterClose, true)
+    assert.equal(reviewFlags(review('2026-10-14T18:00:00Z')).editedAfterClose, false)
+  })
+})
+
+describe('which days can be reviewed', () => {
+  const now = at('2026-10-14T18:00:00Z') // Wednesday 14:00 New York, window open
+
+  test('today follows the window; earlier weekdays are open for catching up or backtesting', () => {
+    assert.equal(reviewDayState('2026-10-14', now, NY), 'open')
+    assert.equal(reviewDayState('2026-10-14', at('2026-10-14T14:00:00Z'), NY), 'not_yet')
+    assert.equal(reviewDayState('2026-10-13', now, NY), 'past')
+    assert.equal(reviewDayState('2024-03-05', now, NY), 'past')
+  })
+
+  test('the future and weekends cannot be reviewed', () => {
+    assert.equal(reviewDayState('2026-10-15', now, NY), 'future')
+    assert.equal(reviewDayState('2026-10-10', now, NY), 'weekend')
+  })
+
+  test('dates are strict', () => {
+    assert.equal(isValidDate('2026-10-14'), true)
+    for (const bad of ['2026-02-30', '2026-13-01', '14/10/2026', '2026-1-4', '', null]) assert.equal(isValidDate(bad), false, String(bad))
+  })
+})
+
+describe('the daily review record', () => {
+  const ctx = { today: '2026-10-14', windowState: 'open' }
+  const r = (writtenAt, isBacktest = false) => ({ reviewDate: '2026-10-13', marketTimezone: 'America/New_York', writtenAt, isBacktest })
+
+  test('on time counts as reviewed; only late reviews count as late', () => {
+    assert.equal(dayRecordStatus('2026-10-13', [r('2026-10-13T19:00:00Z')], ctx), 'reviewed')
+    assert.equal(dayRecordStatus('2026-10-13', [r('2026-10-16T19:00:00Z')], ctx), 'late')
+    assert.equal(dayRecordStatus('2026-10-13', [r('2026-10-16T19:00:00Z'), r('2026-10-13T19:00:00Z')], ctx), 'reviewed')
+  })
+
+  test('a backtest never fills a day in the record', () => {
+    assert.equal(dayRecordStatus('2026-10-13', [r('2026-10-13T19:00:00Z', true)], ctx), 'missed')
+  })
+
+  test('today is due while open and pending before', () => {
+    assert.equal(dayRecordStatus('2026-10-14', [], ctx), 'due')
+    assert.equal(dayRecordStatus('2026-10-14', [], { ...ctx, windowState: 'not_yet' }), 'pending')
   })
 })
 

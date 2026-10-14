@@ -1,8 +1,9 @@
 import { Router } from 'express'
 import prisma from '../prisma/client.js'
+import { parseId } from './ownership.js'
 import {
-  marketSettings, reviewWindow, isEditable, recentWeekdays,
-  coerceReview, validateReview, summarizeReview,
+  marketSettings, reviewWindow, recentWeekdays, reviewDayState, isValidDate, dayRecordStatus,
+  coerceReview, validateReview, serializeReview, summarizeReview,
 } from '../domain/review.js'
 
 const router = Router()
@@ -16,9 +17,12 @@ function rejectInvalid(res, errors) {
   })
 }
 
+async function settingsFor(userId) {
+  return marketSettings(await prisma.profile.findUnique({ where: { userId } }))
+}
+
 async function windowFor(userId, now = new Date()) {
-  const profile = await prisma.profile.findUnique({ where: { userId } })
-  return reviewWindow(now, marketSettings(profile))
+  return reviewWindow(now, await settingsFor(userId))
 }
 
 // The day's plans that actually opened. A blocked day had no plan to compare
@@ -33,6 +37,11 @@ function plansFor(userId, reviewDate) {
     orderBy: { openedAt: 'asc' },
   })
 }
+
+const planSummary = (p) => ({
+  id: p.id, account: p.account, marketSession: p.marketSession, bias: p.bias, wantToSee: p.wantToSee,
+  scenarios: p.scenarios, noTradeIf: p.noTradeIf, tradesLogged: p.tradesLogged, maxTrades: p.maxTrades,
+})
 
 const clock = (instant, timeZone) =>
   new Intl.DateTimeFormat('en-US', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZoneName: 'short' }).format(instant)
@@ -53,27 +62,21 @@ router.get('/today', handle(async (req, res) => {
     prisma.priceActionReview.findMany({ where: { userId: req.userId, reviewDate: window.reviewDate }, orderBy: { writtenAt: 'asc' } }),
     plansFor(req.userId, window.reviewDate),
     prisma.priceActionReview.findMany({
-      where: { userId: req.userId, reviewDate: { in: days } },
-      select: { reviewDate: true },
-      distinct: ['reviewDate'],
+      where: { userId: req.userId, reviewDate: { in: days }, isBacktest: false },
+      select: { reviewDate: true, writtenAt: true, marketTimezone: true, isBacktest: true },
     }),
     prisma.priceActionReview.findFirst({ where: { userId: req.userId }, orderBy: { writtenAt: 'desc' }, select: { symbol: true } }),
   ])
 
-  const reviewed = new Set(reviewedDays.map(r => r.reviewDate))
-  const recentDays = days.map(date => {
-    if (reviewed.has(date)) return { date, status: 'reviewed' }
-    if (date !== window.reviewDate) return { date, status: 'missed' }
-    return { date, status: window.state === 'open' ? 'due' : 'pending' }
-  })
+  const recentDays = days.map(date => ({
+    date,
+    status: dayRecordStatus(date, reviewedDays.filter(r => r.reviewDate === date), { today: window.reviewDate, windowState: window.state }),
+  }))
 
   res.json({
     window,
-    reviews,
-    plans: plans.map(p => ({
-      id: p.id, account: p.account, bias: p.bias, wantToSee: p.wantToSee,
-      scenarios: p.scenarios, noTradeIf: p.noTradeIf, tradesLogged: p.tradesLogged, maxTrades: p.maxTrades,
-    })),
+    reviews: reviews.map(serializeReview),
+    plans: plans.map(planSummary),
     planExists: plans.length > 0,
     recentDays,
     lastSymbol: last?.symbol ?? null,
@@ -91,20 +94,61 @@ router.get('/', handle(async (req, res) => {
   res.json(reviews.map(summarizeReview))
 }))
 
-router.get('/:id', handle(async (req, res) => {
-  const review = await prisma.priceActionReview.findFirst({ where: { id: Number(req.params.id), userId: req.userId } })
-  if (!review) return res.status(404).json({ error: 'Review not found' })
-  res.json(review)
+// GET /api/reviews/day/:date — one trading day: its state, its plans, and
+// any reviews already written for it. Used for catching up a missed day and
+// for backtesting old ones.
+router.get('/day/:date', handle(async (req, res) => {
+  const date = req.params.date
+  if (!isValidDate(date)) return res.status(400).json({ error: 'Date must be YYYY-MM-DD.' })
+  const settings = await settingsFor(req.userId)
+  const [plans, reviews] = await Promise.all([
+    plansFor(req.userId, date),
+    prisma.priceActionReview.findMany({ where: { userId: req.userId, reviewDate: date }, orderBy: { writtenAt: 'asc' } }),
+  ])
+  res.json({
+    date,
+    state: reviewDayState(date, new Date(), settings),
+    plans: plans.map(planSummary),
+    planExists: plans.length > 0,
+    reviews: reviews.map(serializeReview),
+  })
 }))
 
-// POST /api/reviews — today's review for one symbol. The day is the server's
-// to decide, from the market's clock: there is no field for writing one for
-// another date.
-router.post('/', handle(async (req, res) => {
-  const window = await windowFor(req.userId)
-  if (window.state !== 'open') return windowRefusal(res, window)
+router.get('/:id', handle(async (req, res) => {
+  const review = await prisma.priceActionReview.findFirst({ where: { id: parseId(req.params.id) ?? -1, userId: req.userId } })
+  if (!review) return res.status(404).json({ error: 'Review not found' })
+  res.json(serializeReview(review))
+}))
 
-  const planExists = (await plansFor(req.userId, window.reviewDate)).length > 0
+// POST /api/reviews — a review for one symbol on one trading day. Without a
+// reviewDate it is today's, which opens three hours after the open. A past
+// weekday can be reviewed at any time: it is stored with when it was written,
+// so a late review reads as late, and isBacktest marks practice on an old day
+// that never counts toward the daily record.
+router.post('/', handle(async (req, res) => {
+  const settings = await settingsFor(req.userId)
+  const now = new Date()
+  const window = reviewWindow(now, settings)
+  const reviewDate = req.body.reviewDate ?? window.reviewDate
+  if (!isValidDate(reviewDate)) {
+    return rejectInvalid(res, [{ field: 'reviewDate', message: 'Date must be YYYY-MM-DD.' }])
+  }
+
+  const state = reviewDayState(reviewDate, now, settings)
+  if (state === 'future') {
+    return res.status(409).json({ error: 'That day has not happened yet.', code: 'REVIEW_WINDOW' })
+  }
+  if (state === 'weekend' && reviewDate !== window.reviewDate) {
+    return res.status(409).json({ error: `${reviewDate} was a weekend — no price action to review.`, code: 'REVIEW_WINDOW' })
+  }
+  if (state === 'weekend' || state === 'not_yet') return windowRefusal(res, window)
+
+  const isBacktest = req.body.isBacktest === true
+  if (isBacktest && state !== 'past') {
+    return rejectInvalid(res, [{ field: 'isBacktest', message: "Today's review is a live one. Backtests are for days already gone." }])
+  }
+
+  const planExists = (await plansFor(req.userId, reviewDate)).length > 0
   const input = coerceReview(req.body)
   // With no plan there is nothing to have played out; whatever was sent is
   // not a comparison, so it is not stored as one.
@@ -118,32 +162,30 @@ router.post('/', handle(async (req, res) => {
       data: {
         ...input,
         userId: req.userId,
-        reviewDate: window.reviewDate,
-        marketTimezone: window.marketTimezone,
-        marketOpenTime: window.marketOpenTime,
+        reviewDate,
+        isBacktest,
+        marketTimezone: settings.marketTimezone,
+        marketOpenTime: settings.marketOpenTime,
       },
     })
-    res.status(201).json(review)
+    res.status(201).json(serializeReview(review))
   } catch (err) {
     if (err?.code === 'P2002') {
       return res.status(409).json({
-        error: `Today's review for ${input.symbol} is already written. Edit it instead.`,
-        fieldErrors: [{ field: 'symbol', message: 'Already reviewed today.' }],
+        error: `The ${reviewDate} review for ${input.symbol} is already written. Edit it instead.`,
+        fieldErrors: [{ field: 'symbol', message: 'Already reviewed for that day.' }],
       })
     }
     throw err
   }
 }))
 
-// PUT /api/reviews/:id — corrections on the day it was written, not after.
+// PUT /api/reviews/:id — corrections at any time. Each one moves
+// lastEditedAt, and an edit after the review's day closed reads as "edited
+// later" with its time. The day, the backtest mark and writtenAt never change.
 router.put('/:id', handle(async (req, res) => {
-  const existing = await prisma.priceActionReview.findFirst({ where: { id: Number(req.params.id), userId: req.userId } })
+  const existing = await prisma.priceActionReview.findFirst({ where: { id: parseId(req.params.id) ?? -1, userId: req.userId } })
   if (!existing) return res.status(404).json({ error: 'Review not found' })
-  if (!isEditable(existing, new Date())) {
-    return res.status(409).json({
-      error: `The review for ${existing.reviewDate} is closed. A review is written on its own day — after that it would be written with hindsight.`,
-    })
-  }
 
   const planExists = (await plansFor(req.userId, existing.reviewDate)).length > 0
   const input = coerceReview(req.body)
@@ -156,10 +198,10 @@ router.put('/:id', handle(async (req, res) => {
       where: { id: existing.id },
       data: { ...input, lastEditedAt: new Date() },
     })
-    res.json(review)
+    res.json(serializeReview(review))
   } catch (err) {
     if (err?.code === 'P2002') {
-      return res.status(409).json({ error: `Today's review for ${input.symbol} already exists.` })
+      return res.status(409).json({ error: `The ${existing.reviewDate} review for ${input.symbol} already exists.` })
     }
     throw err
   }

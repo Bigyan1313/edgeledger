@@ -35,7 +35,8 @@ export function formatCoachContext({ now, timezone, today, profile, sessions, st
       continue
     }
     const left = s.status === 'open' ? Math.max(0, s.maxTrades - s.tradesLogged) : 0
-    add(`- ${acct}: ${s.status}. Trades used ${s.tradesLogged} of ${s.maxTrades}; ${left} left.${s.tradesLogged > s.maxTrades ? ' OVER THE LIMIT.' : ''}`)
+    const label = { asia: 'Asia', london: 'London', new_york: 'New York' }[s.marketSession]
+    add(`- ${acct}${label ? ` (${label} session)` : ''}: ${s.status}. Trades used ${s.tradesLogged} of ${s.maxTrades}; ${left} left.${s.tradesLogged > s.maxTrades ? ' OVER THE LIMIT.' : ''}`)
     add(`  Slept ${s.sleepHours}h (floor ${s.minSleepHoursApplied}h).${s.bias ? ` Bias ${s.bias}.` : ''}`)
     add(`  Wants to see: ${clip(s.wantToSee)}`)
     for (const sc of s.scenarios ?? []) add(`  If ${clip(sc.if, 100)} → then ${clip(sc.then, 100)}`)
@@ -61,7 +62,7 @@ export function formatCoachContext({ now, timezone, today, profile, sessions, st
     ? `Today's review window is open${reviewWindow.writtenToday ? ' and a review is written.' : ' and NOT yet written.'}`
     : reviewWindow.state === 'not_yet' ? `Opens at ${reviewWindow.opensAt.toISOString()}.` : 'Markets closed today.')
   for (const r of reviews) {
-    add(`- ${r.reviewDate} ${r.symbol}: ${r.dayType}; plan played out: ${r.planPlayedOut ?? 'no plan'}; valid setup: ${r.validSetup ? 'yes' : 'no'}.${r.lesson ? ` Lesson: ${clip(r.lesson, 120)}` : ''}`)
+    add(`- ${r.reviewDate} ${r.symbol}${r.isBacktest ? ' [backtest]' : ''}: ${r.dayType}; plan played out: ${r.planPlayedOut ?? 'no plan'}; valid setup: ${r.validSetup ? 'yes' : 'no'}.${r.lesson ? ` Lesson: ${clip(r.lesson, 120)}` : ''}`)
   }
 
   add('', `## Recent trades (newest first, ${trades.length})`)

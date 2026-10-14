@@ -1,13 +1,19 @@
 // The daily price action review: when it may be written, and what it must say.
 //
-// The window is the rule that matters. It opens three hours after the market
-// opens — before then the morning has not played out, and a review written
-// while positions are open is commentary, not review. It closes at the end of
-// the market's day, because a review written tomorrow already knows how today
-// ended, and hindsight is exactly what a review is meant to be free of.
+// Today's review opens three hours after the market opens — before then the
+// morning has not played out, and a review written while positions are open
+// is commentary, not review.
+//
+// Past days can be reviewed too — a missed day caught up, or old days studied
+// as backtests — and reviews can be corrected at any time. What makes that
+// honest is that the record says when: a review written after its day closed
+// is marked late, an edit after the day closed is marked as such with its
+// time, and a backtest never counts toward the daily record. Hindsight is not
+// forbidden; it is labelled.
 
 import { isValidTimezone } from './profile.js'
 import { localDate, nextDate } from './session.js'
+import { validateCharts, MAX_CHARTS } from './charts.js'
 
 export const REVIEW_DELAY_MINUTES = 3 * 60
 
@@ -24,10 +30,7 @@ export const PLAN_OUTCOMES = ['yes', 'partly', 'no']
 export const MIN_SUMMARY = 20
 const MAX_TEXT = 2000
 const MAX_SYMBOL = 32
-export const MAX_REVIEW_SCREENSHOTS = 3
-// A compressed chart is a few hundred KB as base64; this only stops a pasted
-// full-resolution PNG from becoming a multi-megabyte row.
-const MAX_SCREENSHOT_CHARS = 4_000_000
+export const MAX_REVIEW_SCREENSHOTS = MAX_CHARTS
 
 const blank = (v) => v === null || v === undefined || (typeof v === 'string' && v.trim() === '')
 const text = (v) => (typeof v === 'string' ? v.trim() : '')
@@ -99,11 +102,35 @@ export function reviewWindow(now, { marketOpenTime, marketTimezone }) {
   return { reviewDate, marketOpensAt, opensAt, closesAt, state, marketOpenTime, marketTimezone }
 }
 
-// A review can be corrected on its own day — a typo, a chart added — and not
-// after. Judged against the open it was written under, not today's setting.
-export function isEditable(review, now) {
+// When a review was written and changed, relative to the end of its own day
+// in the market it was written against. These are derived, never stored, so
+// they cannot be set by hand.
+export function reviewFlags(review) {
   const closesAt = zonedTimeToInstant(nextDate(review.reviewDate), '00:00', review.marketTimezone)
-  return now < closesAt
+  const writtenAt = new Date(review.writtenAt)
+  const editedAt = review.lastEditedAt ? new Date(review.lastEditedAt) : null
+  return {
+    closesAt,
+    writtenLate: writtenAt >= closesAt,
+    editedAfterClose: editedAt != null && editedAt >= closesAt,
+  }
+}
+
+const YMD = /^\d{4}-\d{2}-\d{2}$/
+export function isValidDate(ymd) {
+  if (typeof ymd !== 'string' || !YMD.test(ymd)) return false
+  const d = new Date(`${ymd}T12:00:00Z`)
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === ymd
+}
+
+// Where a given trading day stands for reviewing, as of `now`:
+//   weekend · future · not_yet (today, before the window) · open (today) · past
+export function reviewDayState(date, now, settings) {
+  if (isWeekend(date)) return 'weekend'
+  const today = localDate(now, settings.marketTimezone)
+  if (date > today) return 'future'
+  if (date === today) return reviewWindow(now, settings).state
+  return 'past'
 }
 
 // The last n trading days up to and including `today`, newest first. Weekends
@@ -172,17 +199,30 @@ export function validateReview(input, { planExists }) {
     add('validSetup', 'Was there a valid setup by your rules today — whether or not you took it?')
   }
 
-  if (input.screenshots.length > MAX_REVIEW_SCREENSHOTS) {
-    add('screenshots', `At most ${MAX_REVIEW_SCREENSHOTS} charts.`)
-  } else if (input.screenshots.some(s => typeof s !== 'string' || !s.startsWith('data:image/') || s.length > MAX_SCREENSHOT_CHARS)) {
-    add('screenshots', 'Each chart must be an image under about 3MB.')
-  }
+  errors.push(...validateCharts(input.screenshots))
 
   return errors
 }
 
+export function serializeReview(review) {
+  if (!review) return review
+  const { closesAt, writtenLate, editedAfterClose } = reviewFlags(review)
+  return { ...review, closesAt, writtenLate, editedAfterClose, screenshotCount: review.screenshots?.length ?? 0 }
+}
+
 // What the list view needs without the images, which can be large.
 export function summarizeReview(review) {
-  const { screenshots, ...rest } = review
-  return { ...rest, screenshotCount: screenshots?.length ?? 0 }
+  const { screenshots, ...rest } = serializeReview(review)
+  return rest
+}
+
+// A day's status in the review record: reviewed on time, reviewed late,
+// missed, or — for today — due or not yet open. Backtests are excluded by the
+// caller: practice on an old day is not a review of a traded one.
+export function dayRecordStatus(date, reviewsForDay, { today, windowState }) {
+  const live = reviewsForDay.filter(r => !r.isBacktest)
+  if (live.some(r => !reviewFlags(r).writtenLate)) return 'reviewed'
+  if (live.length) return 'late'
+  if (date !== today) return 'missed'
+  return windowState === 'open' ? 'due' : 'pending'
 }

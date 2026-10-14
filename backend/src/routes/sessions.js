@@ -5,7 +5,8 @@ import {
   readinessVerdict, validateReadiness, coerceReadiness,
   validatePlan, coercePlan, validateClose, serializeSession,
 } from '../domain/session.js'
-import { accountAllowed, parseAccountId } from './ownership.js'
+import { validateCharts, MAX_CHARTS } from '../domain/charts.js'
+import { accountAllowed, parseAccountId, parseId } from './ownership.js'
 
 const router = Router()
 
@@ -76,7 +77,7 @@ router.get('/', handle(async (req, res) => {
     // ?all=true is the export: every row, not the recent screenful.
     ...(req.query.all === 'true' ? {} : { take: 90 }),
   })
-  res.json(sessions.map(serializeSession))
+  res.json(sessions.map(s => serializeSession(s, { summary: true })))
 }))
 
 // POST /api/sessions — write the day's plan. Readiness first: if it fails, the
@@ -116,7 +117,7 @@ router.post('/', handle(async (req, res) => {
     blockedElsewhere: await blockedElsewhere(req.userId, sessionDate),
   })
 
-  let plan = { bias: null, wantToSee: null, noTradeIf: null, scenarios: null, maxTrades: null }
+  let plan = { marketSession: null, bias: null, wantToSee: null, noTradeIf: null, scenarios: null, maxTrades: null }
   if (verdict.status === 'open') {
     plan = coercePlan(req.body)
     const planErrors = validatePlan(plan)
@@ -151,11 +152,36 @@ function alreadyWritten(res, sessionDate) {
   })
 }
 
+// POST /api/sessions/:id/screenshots — add charts to an open day's plan. Add
+// only: the text of a plan is locked, and the evidence behind it can grow but
+// not shrink.
+router.post('/:id/screenshots', handle(async (req, res) => {
+  const session = await prisma.tradingSession.findFirst({ where: { id: parseId(req.params.id) ?? -1, userId: req.userId } })
+  if (!session) return res.status(404).json({ error: 'Session not found' })
+  if (session.status !== 'open') {
+    return res.status(409).json({ error: `Charts can be added while the day is open. This session is ${session.status}.` })
+  }
+  const added = Array.isArray(req.body.screenshots) ? req.body.screenshots : []
+  if (!added.length) return rejectInvalid(res, [{ field: 'screenshots', message: 'No chart was sent.' }])
+  const errors = validateCharts([...session.screenshots, ...added])
+  if (errors.length) {
+    return rejectInvalid(res, session.screenshots.length + added.length > MAX_CHARTS
+      ? [{ field: 'screenshots', message: `A plan holds at most ${MAX_CHARTS} charts; this one has ${session.screenshots.length}.` }]
+      : errors)
+  }
+  const updated = await prisma.tradingSession.update({
+    where: { id: session.id },
+    data: { screenshots: { push: added } },
+    include: withAccount,
+  })
+  res.json(serializeSession(updated))
+}))
+
 // POST /api/sessions/:id/close — the post-session review. Only an open day can
 // be closed; a blocked day was never open, and it is already its own outcome.
 router.post('/:id/close', handle(async (req, res) => {
   const session = await prisma.tradingSession.findFirst({
-    where: { id: Number(req.params.id), userId: req.userId },
+    where: { id: parseId(req.params.id) ?? -1, userId: req.userId },
   })
   if (!session) return res.status(404).json({ error: 'Session not found' })
   if (session.status !== 'open') {

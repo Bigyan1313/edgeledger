@@ -263,10 +263,19 @@ model TradingSession {
   // to write a plan to be told they may not trade — and a CHECK constraint
   // requires them on every day that opened.
   bias      String? // long | short | neutral
+  // Which market session the plan is for: asia | london | new_york. Required
+  // on a day that opened; null on a blocked day and on plans written before
+  // it existed. The trade cap stays per account per day across sessions —
+  // per-session caps would turn "2 trades" into 6.
+  marketSession String?
   wantToSee String?
   scenarios Json? // [{ "if": string, "then": string }]
   noTradeIf String?
   maxTrades Int?
+
+  // Pre-market charts. Attached with the plan, and while the day is open
+  // more can be added but none removed — a plan's evidence does not shrink.
+  screenshots String[] @default([])
 
   // Trades logged under this plan. Only ever incremented: deleting a trade
   // from the journal does not un-take it at the broker, so it must not hand
@@ -331,6 +340,10 @@ model PriceActionReview {
 
   lesson      String?
   screenshots String[] @default([])
+
+  // A review of an old day for practice rather than a record of a traded
+  // one. Never counts toward the daily review record.
+  isBacktest Boolean @default(false)
 
   writtenAt    DateTime  @default(now())
   lastEditedAt DateTime?

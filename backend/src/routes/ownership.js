@@ -17,3 +17,10 @@ export function parseAccountId(raw) {
   const n = Number(raw)
   return Number.isInteger(n) && n > 0 ? n : NaN
 }
+
+// A route id that is not a positive integer names nothing, so it is a 404 —
+// passing NaN on to the database would surface as a 500 instead.
+export function parseId(raw) {
+  const n = Number(raw)
+  return Number.isInteger(n) && n > 0 ? n : null
+}

@@ -97,6 +97,7 @@ const trade = (accountId, overrides = {}) => ({
 })
 
 const PLAN = {
+  marketSession: 'new_york',
   bias: 'long',
   wantToSee: 'NY sweeps the Asia low, then a 5m BOS back above it',
   noTradeIf: 'Price is still chopping inside the Asia range at 10:30',
@@ -163,6 +164,11 @@ describe('writing the plan', () => {
     assert.equal(body.minSleepHoursApplied, 6)
     assert.equal(body.scenarios.length, 2)
     assert.equal(body.account.name, 'Lucid 50K')
+  })
+
+  test('the plan carries its session label', async () => {
+    const { body } = await api(`/sessions/today?accountId=${lucid()}&timezone=${ZONE}`)
+    assert.equal(body.session.marketSession, 'new_york')
   })
 
   test('the plan is locked once written — a second one for the day is refused', async () => {
@@ -249,8 +255,9 @@ describe('the trade gate', () => {
   })
 
   test('a plan written after the trade is caught', async () => {
-    const written = await api('/sessions', { method: 'POST', body: plan(tradeify()) })
+    const written = await api('/sessions', { method: 'POST', body: plan(tradeify(), { screenshots: ['data:image/jpeg;base64,QUJD'] }) })
     assert.equal(written.status, 201)
+    assert.equal(written.body.screenshots.length, 1, 'a chart attached with the plan is stored with it')
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
     const { status, body } = await api('/trades', { method: 'POST', body: trade(tradeify(), { entryTimeUtc: thirtyMinutesAgo }) })
     assert.equal(status, 409)
@@ -259,7 +266,7 @@ describe('the trade gate', () => {
 
   test('two saves racing for the last slot: exactly one wins', async () => {
     const race = users.rested.accounts.Race.id
-    const written = await api('/sessions', { method: 'POST', body: plan(race, { maxTrades: 1 }) })
+    const written = await api('/sessions', { method: 'POST', body: plan(race, { maxTrades: 1, screenshots: [] }) })
     assert.equal(written.status, 201)
     const results = await Promise.all([
       api('/trades', { method: 'POST', body: trade(race) }),
@@ -270,6 +277,46 @@ describe('the trade gate', () => {
     assert.deepEqual(statuses, [201, 409, 409])
     assert.equal((await sessionRow(written.body.id)).tradesLogged, 1)
     assert.equal(await prisma.trade.count({ where: { sessionId: written.body.id } }), 1)
+  })
+})
+
+describe('pre-market charts on the plan', () => {
+  const api = as('rested')
+  const IMG = 'data:image/jpeg;base64,AAAA'
+  let sessionId
+
+  test('a plan written without charts has none, and is still open for adding', async () => {
+    const race = users.rested.accounts.Race.id
+    const { session } = (await api(`/sessions/today?accountId=${race}&timezone=${ZONE}`)).body
+    sessionId = session.id
+    assert.deepEqual(session.screenshots, [])
+    assert.equal(session.status, 'open')
+  })
+
+  test('more can be added while the day is open, up to three', async () => {
+    const one = await api(`/sessions/${sessionId}/screenshots`, { method: 'POST', body: { screenshots: [IMG, IMG] } })
+    assert.equal(one.status, 200)
+    assert.equal(one.body.screenshots.length, 2)
+    const over = await api(`/sessions/${sessionId}/screenshots`, { method: 'POST', body: { screenshots: [IMG, IMG] } })
+    assert.equal(over.status, 400)
+    assert.match(over.body.error, /at most 3 charts; this one has 2/)
+    assert.equal((await sessionRow(sessionId)).screenshots.length, 2)
+  })
+
+  test('a link is not a chart', async () => {
+    const bad = await api(`/sessions/${sessionId}/screenshots`, { method: 'POST', body: { screenshots: ['https://x.com/a.png'] } })
+    assert.equal(bad.status, 400)
+  })
+
+  test('the history list carries a count, not the images', async () => {
+    const row = (await api('/sessions')).body.find(s => s.id === sessionId)
+    assert.equal(row.screenshots, undefined)
+    assert.equal(row.screenshotCount, 2)
+  })
+
+  test("another user's plan cannot be given charts", async () => {
+    const { status } = await as('tired')(`/sessions/${sessionId}/screenshots`, { method: 'POST', body: { screenshots: [IMG] } })
+    assert.equal(status, 404)
   })
 })
 
@@ -294,6 +341,11 @@ describe('closing the day', () => {
     assert.equal(body.followedPlan, true)
     assert.ok(body.closedAt)
     assert.equal(body.canTrade, false)
+  })
+
+  test('a closed day takes no more charts', async () => {
+    const { status } = await api(`/sessions/${sessionId}/screenshots`, { method: 'POST', body: { screenshots: ['data:image/jpeg;base64,AAAA'] } })
+    assert.equal(status, 409)
   })
 
   test('nothing is taken after the close, and it cannot be closed twice', async () => {

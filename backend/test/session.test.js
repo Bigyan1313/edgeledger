@@ -12,6 +12,7 @@ import {
 } from '../src/domain/session.js'
 
 const PLAN = {
+  marketSession: 'new_york',
   bias: 'long',
   wantToSee: 'Sweep of Asia low, then 5m BOS back above it',
   noTradeIf: 'Price chops inside Asia range past 10:30',
@@ -131,6 +132,19 @@ describe('the plan', () => {
   test('too many branches is refused', () => {
     const six = Array.from({ length: 6 }, (_, i) => ({ if: `case ${i}`, then: 'do a thing' }))
     assert.equal(validatePlan({ ...PLAN, scenarios: six })[0].field, 'scenarios')
+  })
+
+  test('the plan names its session — Asia, London or New York', () => {
+    for (const ok of ['asia', 'london', 'new_york']) assert.deepEqual(validatePlan({ ...PLAN, marketSession: ok }), [], ok)
+    assert.equal(validatePlan({ ...PLAN, marketSession: null })[0].field, 'marketSession')
+    assert.equal(validatePlan({ ...PLAN, marketSession: 'ny' })[0].field, 'marketSession')
+  })
+
+  test('pre-market charts are optional, images only, and at most three', () => {
+    const img = 'data:image/jpeg;base64,AAAA'
+    assert.deepEqual(validatePlan({ ...PLAN, screenshots: [img, img, img] }), [])
+    assert.equal(validatePlan({ ...PLAN, screenshots: [img, img, img, img] })[0].field, 'screenshots')
+    assert.equal(validatePlan({ ...PLAN, screenshots: ['https://example.com/a.png'] })[0].field, 'screenshots')
   })
 
   test('bias is optional but constrained', () => {

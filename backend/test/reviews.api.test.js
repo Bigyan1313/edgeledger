@@ -137,11 +137,12 @@ describe('once the window is open', () => {
   })
 
   test('with no plan today, a comparison is neither asked for nor stored', async () => {
-    const { status, body } = await api('/reviews', { method: 'POST', body: { ...REVIEW, planPlayedOut: 'yes', reviewDate: '2020-01-01' } })
+    const { status, body } = await api('/reviews', { method: 'POST', body: { ...REVIEW, planPlayedOut: 'yes' } })
     assert.equal(status, 201)
     assert.equal(body.planPlayedOut, null)
-    // The day is the server's: a date sent by the client is ignored.
+    // With no date given, the review is today's.
     assert.equal(body.reviewDate, TODAY)
+    assert.equal(body.writtenLate, false)
     assert.equal(body.marketTimezone, ZONE)
     assert.ok(body.writtenAt)
     firstId = body.id
@@ -157,7 +158,7 @@ describe('once the window is open', () => {
     const plan = await as('me')('/sessions', {
       method: 'POST',
       body: {
-        accountId: users.me.account.id, timezone: ZONE, sleepHours: 8, fitToTrade: true,
+        accountId: users.me.account.id, timezone: ZONE, sleepHours: 8, fitToTrade: true, marketSession: 'new_york',
         wantToSee: 'NY sweeps the Asia low, then a 5m BOS back above it',
         noTradeIf: 'Still inside the Asia range at 10:30',
         scenarios: [{ if: 'Asia low swept and reclaimed', then: 'Long the retest' }],
@@ -214,22 +215,87 @@ describe('once the window is open', () => {
   })
 })
 
-describe('after the day', () => {
+describe('past days: catching up and backtesting', () => {
   const api = as('me')
+  const previousWeekday = (ymd, back = 1) => {
+    const d = new Date(`${ymd}T12:00:00Z`)
+    while (back > 0) { d.setUTCDate(d.getUTCDate() - 1); if (![0, 6].includes(d.getUTCDay())) back-- }
+    return d.toISOString().slice(0, 10)
+  }
+  let lateId
 
-  test("yesterday's review is closed to edits — and yesterday counts as reviewed", async () => {
-    const yesterday = new Date(`${TODAY}T12:00:00Z`)
-    do { yesterday.setUTCDate(yesterday.getUTCDate() - 1) } while ([0, 6].includes(yesterday.getUTCDay()))
-    const date = yesterday.toISOString().slice(0, 10)
-    const old = await prisma.priceActionReview.create({
-      data: { userId: users.me.id, reviewDate: date, symbol: 'MNQZ6', marketTimezone: ZONE, marketOpenTime: '09:30', dayType: 'chop', summary: 'Chopped in the Asia range all morning.', validSetup: false },
-    })
-    const { status, body } = await api(`/reviews/${old.id}`, { method: 'PUT', body: { ...REVIEW } })
-    assert.equal(status, 409)
-    assert.match(body.error, /hindsight/)
+  test('a missed day can be reviewed — and is marked as written late', async () => {
+    const date = previousWeekday(TODAY)
+    const { status, body } = await api('/reviews', { method: 'POST', body: { ...REVIEW, reviewDate: date } })
+    assert.equal(status, 201)
+    assert.equal(body.reviewDate, date)
+    assert.equal(body.writtenLate, true)
+    assert.equal(body.isBacktest, false)
+    lateId = body.id
+  })
+
+  test('in the ten-day record it shows as late, not as reviewed', async () => {
+    const { body } = await api('/reviews/today')
+    assert.equal(body.recentDays[1].status, 'late')
+    assert.equal(body.recentDays[0].status, 'reviewed')
+  })
+
+  test('a backtest of an old day is stored as one and never fills the record', async () => {
+    const twoBack = previousWeekday(TODAY, 2)
+    const { status, body } = await api('/reviews', { method: 'POST', body: { ...REVIEW, reviewDate: twoBack, isBacktest: true } })
+    assert.equal(status, 201)
+    assert.equal(body.isBacktest, true)
     const today = await api('/reviews/today')
-    assert.equal(today.body.recentDays[1].status, 'reviewed')
-    assert.ok(today.body.recentDays.slice(2).every(d => d.status === 'missed'))
+    assert.equal(today.body.recentDays[2].status, 'missed')
+  })
+
+  test('backtests reach back as far as wanted', async () => {
+    const { status } = await api('/reviews', { method: 'POST', body: { ...REVIEW, reviewDate: '2025-03-04', isBacktest: true } })
+    assert.equal(status, 201)
+  })
+
+  test("today's review cannot be marked a backtest", async () => {
+    const { status, body } = await api('/reviews', { method: 'POST', body: { ...REVIEW, symbol: 'MYMZ6', isBacktest: true } })
+    assert.equal(status, 400)
+    assert.equal(body.fieldErrors[0].field, 'isBacktest')
+  })
+
+  test('the future and weekends cannot be reviewed, and dates are strict', async () => {
+    const tomorrow = new Date(`${TODAY}T12:00:00Z`); tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
+    assert.equal((await api('/reviews', { method: 'POST', body: { ...REVIEW, reviewDate: tomorrow.toISOString().slice(0, 10) } })).status, 409)
+    const weekend = await api('/reviews', { method: 'POST', body: { ...REVIEW, reviewDate: '2025-03-08' } })
+    assert.equal(weekend.status, 409)
+    assert.match(weekend.body.error, /was a weekend/)
+    assert.equal((await api('/reviews', { method: 'POST', body: { ...REVIEW, reviewDate: '2025-02-30' } })).status, 400)
+  })
+
+  test('a past day opens with its plans and reviews', async () => {
+    const date = previousWeekday(TODAY)
+    const { status, body } = await api(`/reviews/day/${date}`)
+    assert.equal(status, 200)
+    assert.equal(body.state, 'past')
+    assert.equal(body.reviews.length, 1)
+    assert.equal(body.reviews[0].writtenLate, true)
+  })
+
+  test('editing after the day closed is allowed, and marked with its time', async () => {
+    const { status, body } = await api(`/reviews/${lateId}`, { method: 'PUT', body: { ...REVIEW, lesson: 'Added later, on purpose.' } })
+    assert.equal(status, 200)
+    assert.equal(body.editedAfterClose, true)
+    assert.ok(body.lastEditedAt)
+    assert.equal(body.writtenLate, true)
+  })
+
+  test("an edit on the review's own day is not marked as later", async () => {
+    const todays = (await api('/reviews/today')).body.reviews[0]
+    const { body } = await api(`/reviews/${todays.id}`, { method: 'PUT', body: { ...REVIEW, symbol: todays.symbol, planPlayedOut: 'no' } })
+    assert.equal(body.editedAfterClose, false)
+  })
+
+  test('an edit cannot change the day or the backtest mark', async () => {
+    const { body } = await api(`/reviews/${lateId}`, { method: 'PUT', body: { ...REVIEW, reviewDate: '2020-01-01', isBacktest: true } })
+    assert.equal(body.reviewDate, previousWeekday(TODAY))
+    assert.equal(body.isBacktest, false)
   })
 })
 
@@ -239,5 +305,15 @@ describe('ownership', () => {
     assert.equal((await as('other')(`/reviews/${mine.id}`)).status, 404)
     assert.equal((await as('other')(`/reviews/${mine.id}`, { method: 'PUT', body: REVIEW })).status, 404)
     assert.equal((await as('other')('/reviews')).body.length, 0)
+  })
+})
+
+describe('malformed ids', () => {
+  test('a non-numeric id is a 404, not a server error', async () => {
+    if (!TEST_DATABASE_URL || !PICK) return
+    const api = as('me')
+    assert.equal((await api('/reviews/undefined')).status, 404)
+    assert.equal((await api('/reviews/abc', { method: 'PUT', body: REVIEW })).status, 404)
+    assert.equal((await api('/sessions/abc/close', { method: 'POST', body: { followedPlan: true } })).status, 404)
   })
 })

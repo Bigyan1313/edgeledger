@@ -105,6 +105,19 @@ describe('account rules and standing', () => {
     assert.equal((await as('other')(`/accounts/${lucid.id}`, { method: 'PUT', body: { dailyLossLimit: 1 } })).status, 404)
   })
 
+  test('the account details themselves can be edited after creation', async () => {
+    const renamed = await api(`/accounts/${lucid.id}`, { method: 'PUT', body: { name: 'Lucid Flex 50K', mode: 'Demo', propFirm: 'Lucid Trading' } })
+    assert.equal(renamed.status, 200)
+    assert.equal(renamed.body.name, 'Lucid Flex 50K')
+    assert.equal(renamed.body.mode, 'Demo')
+    assert.equal(renamed.body.propFirm, 'Lucid Trading')
+    // Live accounts carry no prop firm, as at creation.
+    const live = await api(`/accounts/${lucid.id}`, { method: 'PUT', body: { mode: 'Live' } })
+    assert.equal(live.body.propFirm, null)
+    assert.equal((await api(`/accounts/${lucid.id}`, { method: 'PUT', body: { mode: 'Paper' } })).status, 400)
+    assert.equal((await api(`/accounts/${lucid.id}`, { method: 'PUT', body: { name: '  ' } })).status, 400)
+  })
+
   test('clearing the drawdown clears both halves together', async () => {
     const { status, body } = await api(`/accounts/${lucid.id}`, {
       method: 'PUT', body: { maxDrawdown: '', drawdownType: '', drawdownLockBalance: '' },

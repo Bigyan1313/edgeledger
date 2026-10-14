@@ -62,10 +62,23 @@ router.put('/:id', handle(async (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Account not found' })
 
   const changes = coerceAccountRules(req.body)
-  if (Object.prototype.hasOwnProperty.call(req.body, 'name')) {
+  const has = (k) => Object.prototype.hasOwnProperty.call(req.body, k)
+  if (has('name')) {
     const name = String(req.body.name ?? '').trim()
     if (!name) return res.status(400).json({ error: 'Account name is required', fieldErrors: [{ field: 'name', message: 'Account name is required.' }] })
     changes.name = name
+  }
+  if (has('mode')) {
+    if (req.body.mode !== 'Live' && req.body.mode !== 'Demo') {
+      return res.status(400).json({ error: 'Mode must be "Live" or "Demo"', fieldErrors: [{ field: 'mode', message: 'Live or Demo.' }] })
+    }
+    changes.mode = req.body.mode
+  }
+  // Same rule as creation: a prop firm is only recorded on a Demo account.
+  const mode = changes.mode ?? existing.mode
+  if (has('propFirm') || has('mode')) {
+    const firm = has('propFirm') ? String(req.body.propFirm ?? '').trim() : existing.propFirm
+    changes.propFirm = mode === 'Demo' && firm ? firm : null
   }
 
   const errors = validateAccountRules({ ...existing, ...changes })

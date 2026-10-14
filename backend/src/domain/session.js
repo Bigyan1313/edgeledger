@@ -16,6 +16,7 @@
 // broken rule is then stored on the trade permanently.
 
 import { isValidTimezone } from './profile.js'
+import { validateCharts } from './charts.js'
 
 // "Max 2 trades an account, no matter what." Lowering it is allowed; raising
 // it is not, in the API or in the database (a CHECK constraint backs this).
@@ -27,6 +28,11 @@ export const MAX_TRADES_CEILING = 2
 export const DEFAULT_MIN_SLEEP_HOURS = 6
 
 export const BIASES = ['long', 'short', 'neutral']
+
+// The market session a plan is for. A label on the day's one plan, not a
+// separate plan with its own cap: three sessions with two trades each would
+// be six trades, and the limit is two per account per day.
+export const MARKET_SESSIONS = ['asia', 'london', 'new_york']
 export const MAX_SCENARIOS = 5
 
 // Long enough that "x" or "idk" does not count as a plan; short enough that a
@@ -130,9 +136,15 @@ export function validatePlan(input) {
   const errors = []
   const add = (field, message) => errors.push({ field, message })
 
+  if (!MARKET_SESSIONS.includes(input.marketSession)) {
+    add('marketSession', 'Which session is this plan for — Asia, London or New York?')
+  }
+
   if (!blank(input.bias) && !BIASES.includes(input.bias)) {
     add('bias', `Bias must be one of: ${BIASES.join(', ')}.`)
   }
+
+  errors.push(...validateCharts(input.screenshots ?? []))
 
   const wantToSee = text(input.wantToSee)
   if (wantToSee.length < MIN_PLAN_TEXT) {
@@ -179,6 +191,8 @@ export function validatePlan(input) {
 
 export function coercePlan(body) {
   return {
+    marketSession: blank(body.marketSession) ? null : String(body.marketSession).trim(),
+    screenshots: Array.isArray(body.screenshots) ? body.screenshots : [],
     bias: blank(body.bias) ? null : String(body.bias).trim(),
     wantToSee: text(body.wantToSee),
     noTradeIf: text(body.noTradeIf),
@@ -241,11 +255,21 @@ export function describeViolations(codes) {
   return codes.map(code => ({ code, message: VIOLATIONS[code] ?? code }))
 }
 
-// What the client needs to render a session, beyond its columns.
-export function serializeSession(session) {
+// What the client needs to render a session, beyond its columns. Lists pass
+// summary: true and get a count instead of the images.
+export function serializeSession(session, { summary = false } = {}) {
   if (!session) return null
+  if (summary) {
+    const { screenshots, ...rest } = session
+    return serializeSession({ ...rest, screenshotCount: screenshots?.length ?? 0 })
+  }
   const tradesRemaining = session.status === 'open'
     ? Math.max(0, session.maxTrades - session.tradesLogged)
     : 0
-  return { ...session, tradesRemaining, canTrade: tradesRemaining > 0 }
+  return {
+    ...session,
+    screenshotCount: session.screenshotCount ?? session.screenshots?.length ?? 0,
+    tradesRemaining,
+    canTrade: tradesRemaining > 0,
+  }
 }

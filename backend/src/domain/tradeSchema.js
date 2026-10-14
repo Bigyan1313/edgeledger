@@ -145,8 +145,73 @@ export function normalizeSymbol(pair) {
   return bare || null
 }
 
+// Futures: dollars per one full point of price, per contract. Same role as a
+// CFD contract size in riskDollars = |entry − stop| × contracts × this, with
+// lotSize read as the number of contracts. CME specifications.
+export const FUTURES_POINT_VALUES = {
+  // Equity indices
+  NQ: 20, MNQ: 2,
+  ES: 50, MES: 5,
+  YM: 5, MYM: 0.5,
+  RTY: 50, M2K: 5,
+  // Metals
+  GC: 100, MGC: 10,
+  SI: 5000, SIL: 1000,
+  HG: 25000, MHG: 2500,
+  // Energy
+  CL: 1000, MCL: 100,
+  NG: 10000,
+  // FX
+  '6E': 125000, M6E: 12500,
+  '6B': 62500,
+  // Rates
+  ZN: 1000, ZB: 1000,
+  // Crypto
+  BTC: 5, MBT: 0.1,
+  ETH: 50, MET: 0.1,
+}
+
+const MONTH_CODES = 'FGHJKMNQUVXZ'
+
+// A futures symbol as platforms write it, reduced to its root and contract
+// month. The month matters for matching fills to trades; the root is what
+// prices it. Returns null for anything that is not a known futures root, so a
+// CFD symbol is never mistaken for one.
+//
+//   MNQZ6, MNQZ26, MNQZ2026   Tradovate, Rithmic, TradingView
+//   MNQ 12-26                 NinjaTrader
+//   MNQ1!                     TradingView continuous
+//   /MNQZ6                    thinkorswim
+//   MNQ                       bare root
+//
+// The month code is the letter right before the trailing year digits, so the
+// split is unique even for roots that contain month letters (MNQ, NQ) or
+// digits (M2K, 6E).
+export function parseFuturesSymbol(pair) {
+  if (typeof pair !== 'string') return null
+  const s = pair.trim().toUpperCase().replace(/^\//, '')
+  const known = (root) => Object.prototype.hasOwnProperty.call(FUTURES_POINT_VALUES, root)
+  let m
+
+  if ((m = /^([A-Z0-9]+?)([FGHJKMNQUVXZ])(\d{1,4})$/.exec(s)) && known(m[1])) {
+    return { root: m[1], month: m[2], year: Number(m[3]) % 10 }
+  }
+  if ((m = /^([A-Z0-9]+)\s+(\d{2})-(\d{2})$/.exec(s)) && known(m[1])) {
+    const month = MONTH_CODES[Number(m[2]) - 1]
+    return month ? { root: m[1], month, year: Number(m[3]) % 10 } : null
+  }
+  if ((m = /^([A-Z0-9]+?)\d!$/.exec(s)) && known(m[1])) {
+    return { root: m[1], month: null, year: null }
+  }
+  if (known(s)) return { root: s, month: null, year: null }
+  return null
+}
+
 export function contractSizeFor(pair) {
+  // CFD and spot symbols first, unchanged: an existing XAUUSD.pro trade must
+  // price exactly as it did before futures were added.
   const symbol = normalizeSymbol(pair)
-  if (!symbol) return null
-  return CONTRACT_SIZES[symbol] ?? null
+  if (symbol && CONTRACT_SIZES[symbol] !== undefined) return CONTRACT_SIZES[symbol]
+  const future = parseFuturesSymbol(pair)
+  return future ? FUTURES_POINT_VALUES[future.root] : null
 }

@@ -4,7 +4,7 @@ import { request } from './client.js'
 // for, from the market's clock — there is no date to send.
 export const reviewsApi = {
   today: () => request('/reviews/today'),
-  list: () => request('/reviews'),
+  list: ({ all = false } = {}) => request(`/reviews${all ? '?all=true' : ''}`),
   get: (id) => request(`/reviews/${id}`),
   create: (data) => request('/reviews', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/reviews/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

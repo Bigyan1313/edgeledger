@@ -85,7 +85,8 @@ router.get('/', handle(async (req, res) => {
   const reviews = await prisma.priceActionReview.findMany({
     where: { userId: req.userId },
     orderBy: [{ reviewDate: 'desc' }, { writtenAt: 'desc' }],
-    take: 60,
+    // ?all=true is the export: every row, not the recent screenful.
+    ...(req.query.all === 'true' ? {} : { take: 60 }),
   })
   res.json(reviews.map(summarizeReview))
 }))

@@ -73,7 +73,8 @@ router.get('/', handle(async (req, res) => {
     where: { userId: req.userId },
     include: withAccount,
     orderBy: [{ sessionDate: 'desc' }, { openedAt: 'desc' }],
-    take: 90,
+    // ?all=true is the export: every row, not the recent screenful.
+    ...(req.query.all === 'true' ? {} : { take: 90 }),
   })
   res.json(sessions.map(serializeSession))
 }))

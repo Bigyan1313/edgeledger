@@ -139,17 +139,87 @@ export function tradesToCsv(trades, options = {}) {
   return [header, ...lines].join('\n') + '\n'
 }
 
-export function exportFilename(date = new Date()) {
-  return `edgeledger-trades-v2-${date.toISOString().slice(0, 10)}.csv`
+// --- sessions and reviews ------------------------------------------------------------
+//
+// The same contract as the trade export, for the two tables the pipeline joins
+// against it: session_id is trades.session_id, and a review's review_date is
+// the session_date of that day's plans. Together they answer what the trade
+// table alone cannot — how sleep, the plan, and the market's day relate to
+// the results.
+
+const SESSION_COLUMNS = [
+  ['session_id', s => s.id],
+  ['session_date', s => s.sessionDate],
+  ['timezone', s => s.timezone],
+  ['account_id', s => s.accountId],
+  ['account_name', s => s.account?.name],
+  ['status', s => s.status],
+  ['sleep_hours', s => s.sleepHours],
+  ['fit_to_trade', s => s.fitToTrade],
+  ['min_sleep_hours_applied', s => s.minSleepHoursApplied],
+  ['blocked_reasons', s => s.blockedReasons],
+  ['bias', s => s.bias],
+  ['want_to_see', s => s.wantToSee],
+  // JSON rather than a pipe list: a scenario is two free-text halves, and
+  // free text can contain anything. json.loads() reads it back exactly.
+  ['scenarios', s => (s.scenarios == null ? null : JSON.stringify(s.scenarios))],
+  ['scenario_count', s => (Array.isArray(s.scenarios) ? s.scenarios.length : null)],
+  ['no_trade_if', s => s.noTradeIf],
+  ['max_trades', s => s.maxTrades],
+  ['trades_logged', s => s.tradesLogged],
+  // More trades logged than the plan allowed — on a blocked day, any at all.
+  ['over_limit', s => (s.maxTrades == null ? s.tradesLogged > 0 : s.tradesLogged > s.maxTrades)],
+  ['opened_at', s => s.openedAt],
+  ['closed_at', s => s.closedAt],
+  ['followed_plan', s => s.followedPlan],
+  ['review', s => s.review],
+]
+
+const REVIEW_COLUMNS = [
+  ['review_id', r => r.id],
+  ['review_date', r => r.reviewDate],
+  ['symbol', r => r.symbol],
+  ['market_timezone', r => r.marketTimezone],
+  ['market_open_time', r => r.marketOpenTime],
+  ['day_type', r => r.dayType],
+  ['summary', r => r.summary],
+  ['open_behavior', r => r.openBehavior],
+  ['key_levels', r => r.keyLevels],
+  ['liquidity_taken', r => r.liquidityTaken],
+  ['plan_played_out', r => r.planPlayedOut],
+  ['valid_setup', r => r.validSetup],
+  ['lesson', r => r.lesson],
+  ['screenshot_count', r => r.screenshotCount ?? r.screenshots?.length ?? 0],
+  ['written_at', r => r.writtenAt],
+  ['last_edited_at', r => r.lastEditedAt],
+]
+
+export const SESSION_CSV_COLUMNS = SESSION_COLUMNS.map(([name]) => name)
+export const REVIEW_CSV_COLUMNS = REVIEW_COLUMNS.map(([name]) => name)
+
+function toCsv(columns, rows) {
+  const header = columns.map(([name]) => name).join(',')
+  const lines = rows.map(row => columns.map(([, read]) => escape(read(row))).join(','))
+  return [header, ...lines].join('\n') + '\n'
+}
+
+export const sessionsToCsv = (sessions) => toCsv(SESSION_COLUMNS, sessions)
+export const reviewsToCsv = (reviews) => toCsv(REVIEW_COLUMNS, reviews)
+
+export function exportFilename(date = new Date(), table = 'trades-v2') {
+  return `edgeledger-${table}-${date.toISOString().slice(0, 10)}.csv`
 }
 
 export function downloadCsv(trades, options = {}) {
-  const csv = tradesToCsv(trades, options)
+  saveCsv(tradesToCsv(trades, options), exportFilename())
+}
+
+export function saveCsv(csv, filename) {
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = exportFilename()
+  link.download = filename
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)

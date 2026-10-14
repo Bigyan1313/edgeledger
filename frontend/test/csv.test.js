@@ -1,7 +1,10 @@
 // Task 9: the export format is a contract with the analysis pipeline.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { tradesToCsv, exportFilename, CSV_COLUMNS, selectExportRows } from '../src/utils/csv.js'
+import {
+  tradesToCsv, exportFilename, CSV_COLUMNS, selectExportRows,
+  sessionsToCsv, reviewsToCsv, SESSION_CSV_COLUMNS, REVIEW_CSV_COLUMNS,
+} from '../src/utils/csv.js'
 
 const v2Trade = (overrides = {}) => ({
   id: 1,
@@ -179,4 +182,89 @@ test('the filename states the schema version and the date', () => {
 test('an empty journal still exports a valid header row', () => {
   const csv = tradesToCsv([])
   assert.equal(csv, CSV_COLUMNS.join(',') + '\n')
+})
+
+// --- sessions and reviews ------------------------------------------------------------
+
+
+// A row parser that respects quotes, so free text with commas reads back whole.
+function parseRow(line) {
+  const out = []
+  let field = ''
+  let quoted = false
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i]
+    if (quoted) {
+      if (c === '"' && line[i + 1] === '"') { field += '"'; i++ }
+      else if (c === '"') quoted = false
+      else field += c
+    } else if (c === '"') quoted = true
+    else if (c === ',') { out.push(field); field = '' }
+    else field += c
+  }
+  out.push(field)
+  return out
+}
+const table = (csv) => {
+  const [header, ...rows] = csv.trimEnd().split('\n')
+  const cols = header.split(',')
+  return rows.map(r => Object.fromEntries(parseRow(r).map((v, i) => [cols[i], v])))
+}
+
+const OPEN_DAY = {
+  id: 42, sessionDate: '2026-10-14', timezone: 'America/Chicago', accountId: 7, account: { id: 7, name: 'Lucid 50K' },
+  status: 'closed', sleepHours: 7.5, fitToTrade: true, minSleepHoursApplied: 6, blockedReasons: [],
+  bias: 'long', wantToSee: 'Sweep of the Asia low, then a 5m BOS', noTradeIf: 'Chop inside Asia, past 10:30',
+  scenarios: [{ if: 'Asia low swept, "reclaimed"', then: 'Long the retest, stop under the sweep' }, { if: 'High taken first', then: 'Stand aside' }],
+  maxTrades: 2, tradesLogged: 3, openedAt: '2026-10-14T13:20:00.000Z', closedAt: '2026-10-14T19:00:00.000Z',
+  followedPlan: false, review: 'Took a third, after two stops.',
+}
+const BLOCKED_DAY = {
+  id: 43, sessionDate: '2026-10-15', timezone: 'America/Chicago', accountId: 7, account: { id: 7, name: 'Lucid 50K' },
+  status: 'blocked', sleepHours: 4.5, fitToTrade: true, minSleepHoursApplied: 6,
+  blockedReasons: ['Slept 4.5h — the floor is 6h.'], bias: null, wantToSee: null, noTradeIf: null,
+  scenarios: null, maxTrades: null, tradesLogged: 0, openedAt: '2026-10-15T12:00:00.000Z', closedAt: null,
+  followedPlan: null, review: null,
+}
+
+test('session columns are snake_case and carry the join key', () => {
+  assert.ok(SESSION_CSV_COLUMNS.includes('session_id'))
+  assert.ok(SESSION_CSV_COLUMNS.every(c => !/[A-Z]/.test(c)))
+})
+
+test('scenarios survive as JSON, quotes and commas included', () => {
+  const [row] = table(sessionsToCsv([OPEN_DAY]))
+  assert.deepEqual(JSON.parse(row.scenarios), OPEN_DAY.scenarios)
+  assert.equal(row.scenario_count, '2')
+})
+
+test('a day over its limit says so — and a blocked day with no trades does not', () => {
+  const [open, blocked] = table(sessionsToCsv([OPEN_DAY, BLOCKED_DAY]))
+  assert.equal(open.over_limit, 'true')
+  assert.equal(blocked.over_limit, 'false')
+  assert.equal(table(sessionsToCsv([{ ...BLOCKED_DAY, tradesLogged: 1 }]))[0].over_limit, 'true')
+})
+
+test('a blocked day exports empty plan cells, never "null"', () => {
+  const [row] = table(sessionsToCsv([BLOCKED_DAY]))
+  assert.equal(row.want_to_see, '')
+  assert.equal(row.scenarios, '')
+  assert.equal(row.max_trades, '')
+  assert.equal(row.followed_plan, '')
+  assert.equal(row.blocked_reasons, 'Slept 4.5h — the floor is 6h.')
+})
+
+test('review columns are snake_case and export booleans and times plainly', () => {
+  assert.ok(REVIEW_CSV_COLUMNS.every(c => !/[A-Z]/.test(c)))
+  const [row] = table(reviewsToCsv([{
+    id: 9, reviewDate: '2026-10-14', symbol: 'MNQZ6', marketTimezone: 'America/New_York', marketOpenTime: '09:30',
+    dayType: 'reversal', summary: 'Swept the Asia low, reclaimed, trended to PDH.', openBehavior: null, keyLevels: null,
+    liquidityTaken: 'sell_side', planPlayedOut: 'partly', validSetup: true, lesson: null, screenshotCount: 2,
+    writtenAt: '2026-10-14T17:00:00.000Z', lastEditedAt: null,
+  }]))
+  assert.equal(row.valid_setup, 'true')
+  assert.equal(row.screenshot_count, '2')
+  assert.equal(row.written_at, '2026-10-14T17:00:00+00:00')
+  assert.equal(row.summary, 'Swept the Asia low, reclaimed, trended to PDH.')
+  assert.equal(row.last_edited_at, '')
 })

@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { Download } from 'lucide-react'
 import { tradesApi } from './api/trades.js'
 import { accountsApi } from './api/accounts.js'
 import { profileApi } from './api/profile.js'
@@ -17,7 +16,8 @@ import SessionPlan from './components/SessionPlan.jsx'
 import PriceActionReview from './components/PriceActionReview.jsx'
 import AuthScreen from './components/AuthScreen.jsx'
 import WakingScreen from './components/WakingScreen.jsx'
-import { downloadCsv, selectExportRows } from './utils/csv.js'
+import { selectExportRows } from './utils/csv.js'
+import ExportButtons from './components/ExportButtons.jsx'
 
 export default function App() {
   const { user, logout } = useAuth()
@@ -217,13 +217,7 @@ export default function App() {
                         Include v1 rows
                       </span>
                     </label>
-                    <button
-                      onClick={() => downloadCsv(trades, { includeLegacy })}
-                      disabled={exportableCount === 0}
-                      className="text-sm px-3.5 py-2 border border-line bg-surface-2 rounded-xl text-faint hover:bg-surface-3 hover:text-bright disabled:opacity-40 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-1.5"
-                    >
-                      <Download size={14} strokeWidth={2} />Export CSV ({exportableCount})
-                    </button>
+                    <ExportButtons trades={trades} includeLegacy={includeLegacy} exportableCount={exportableCount} />
                   </div>
                 </div>
 

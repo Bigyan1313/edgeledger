@@ -12,7 +12,7 @@ export const sessionsApi = {
     if (accountId != null) params.set('accountId', String(accountId))
     return request(`/sessions/today?${params}`)
   },
-  list: () => request('/sessions'),
+  list: ({ all = false } = {}) => request(`/sessions${all ? '?all=true' : ''}`),
   // Readiness plus, if readiness passes, the plan. Locked once saved.
   create: (data) => request('/sessions', { method: 'POST', body: JSON.stringify({ timezone: browserTimezone(), ...data }) }),
   close: (id, data) => request(`/sessions/${id}/close`, { method: 'POST', body: JSON.stringify(data) }),

@@ -78,6 +78,15 @@ model Account {
   mode            String // "Live" | "Demo"
   propFirm        String? // for Demo accounts: prop firm name (null = plain practice / N/A)
   startingBalance Float?
+
+  // The firm's rules for losing the account, as the trader enters them. All
+  // optional: an account without rules simply shows no distance-to-losing,
+  // rather than one computed from limits nobody set.
+  dailyLossLimit      Float? // dollars from the day's start
+  maxDrawdown         Float? // dollars from the floor's reference point
+  drawdownType        String? // static | eod_trailing | intraday_trailing
+  drawdownLockBalance Float? // a trailing floor stops rising at this balance
+
   createdAt       DateTime @default(now())
   trades          Trade[]
   sessions        TradingSession[]

@@ -356,6 +356,12 @@ describe('a tired day', () => {
     assert.ok(body.session.blockedReasons.length)
   })
 
+  test('an account with no plan is refused for the real reason: it is a no-trade day', async () => {
+    const { status, body } = await api('/trades', { method: 'POST', body: trade(users.tired.accounts.Race.id) })
+    assert.equal(status, 409)
+    assert.deepEqual(body.violations.map(v => v.code), ['trading_while_blocked'])
+  })
+
   test('a blocked day cannot be closed into looking like a traded one', async () => {
     const id = (await api(`/sessions/today?accountId=${lucid()}&timezone=${ZONE}`)).body.session.id
     const { status } = await api(`/sessions/${id}/close`, { method: 'POST', body: { followedPlan: true } })

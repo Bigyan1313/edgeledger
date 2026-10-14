@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, ImageUp, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, ArrowRight, ImageUp, Lock, OctagonX, X } from 'lucide-react'
 import { tradesApi } from '../api/trades.js'
+import { sessionsApi } from '../api/sessions.js'
 import AccountSelector from './AccountSelector.jsx'
 import { fileToCompressedDataUrl } from '../utils/image.js'
 import { isoToZonedInput, possibleInstantsForLocal, zonedInputToIso } from '../utils/datetime.js'
@@ -49,9 +50,14 @@ const EMPTY = {
 // fields that are genuinely the same every time — the platform and the broker
 // account. Never the setup or the emotional state: those are judgements about
 // this trade, and a remembered answer is indistinguishable from a fresh one.
-function emptyFormFor(profile) {
+// The account is a context, not an answer about the trade: it is whichever
+// account the trader is working on, so it carries over from the session plan
+// rather than starting blank and making "Log a trade under this plan" land on
+// a form that says there is no plan.
+function emptyFormFor(profile, accountId = null) {
   return {
     ...EMPTY,
+    accountId,
     brokerPlatform: profile?.defaultBrokerPlatform || EMPTY.brokerPlatform,
     brokerAccountId: profile?.defaultBrokerAccountId || '',
   }
@@ -95,16 +101,32 @@ function plannedRR(form) {
 const num = (v) => (v === '' || v === null ? null : parseFloat(v))
 const bool = (v) => (v === '' ? null : v === 'true')
 
-export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onCreated, onAmended, onCancelAmend, profile = null }) {
+export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onCreated, onAmended, onCancelAmend, onGoSession, activeAccountId = null, onAccountChange, profile = null }) {
   const isAmending = Boolean(amendTrade)
   const [timezone] = useState(() => amendTrade?.captureTimezone || profile?.timezone || detectTimezone())
-  const [form, setForm] = useState(() => amendTrade ? tradeToForm(amendTrade, timezone) : emptyFormFor(profile))
+  const [form, setForm] = useState(() => amendTrade ? tradeToForm(amendTrade, timezone) : emptyFormFor(profile, activeAccountId))
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
   const [processingImg, setProcessingImg] = useState(false)
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState(null)
   const [fieldErrors, setFieldErrors] = useState({})
+
+  // Today's session for the selected account, shown above the form so the plan
+  // is in view at the moment of entry — and the gate's refusal, if the save is
+  // turned away.
+  const [gate, setGate] = useState(null)
+  const [refusal, setRefusal] = useState(null)
+  const [gateVersion, setGateVersion] = useState(0)
+
+  useEffect(() => {
+    if (isAmending) return
+    let cancelled = false
+    sessionsApi.today(form.accountId)
+      .then(ctx => { if (!cancelled) setGate(ctx) })
+      .catch(() => { if (!cancelled) setGate(null) })
+    return () => { cancelled = true }
+  }, [isAmending, form.accountId, gateVersion])
 
   const entryChoices = useMemo(() => {
     if (!form.entryTimeUtc) return []
@@ -158,10 +180,18 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
     setForm(f => ({ ...f, entryTimeUtc: isoToZonedInput(instant, timezone), entryInstant: instant }))
   }
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault()
+    return submit({ acknowledgeRuleBreak: false })
+  }
+
+  // acknowledgeRuleBreak is only ever sent from the refusal panel, after the
+  // server has said which rules this trade breaks. It records a trade that was
+  // already taken; it does not make the rules go away.
+  const submit = async ({ acknowledgeRuleBreak }) => {
     setError(null)
     setFieldErrors({})
+    setRefusal(null)
     setSaving(true)
     try {
       const payload = {
@@ -184,6 +214,7 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
         notes: notesForImport(form.notes, form.journaledAfterOutcome),
         setupNotes: form.setupNotes.trim() || null,
         screenshots: form.screenshots,
+        ...(acknowledgeRuleBreak ? { acknowledgeRuleBreak: true } : {}),
       }
 
       if (isAmending) {
@@ -192,11 +223,16 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
       } else {
         const created = await tradesApi.create(payload)
         onCreated(created)
-        setForm(emptyFormFor(profile))
+        setForm(emptyFormFor(profile, form.accountId))
+        setGateVersion(v => v + 1)
       }
     } catch (err) {
-      setError(err.message)
-      setFieldErrors(Object.fromEntries((err.fieldErrors ?? []).map(f => [f.field, f.message])))
+      if (err.code === 'SESSION_RULES') {
+        setRefusal({ violations: err.violations, session: err.session })
+      } else {
+        setError(err.message)
+        setFieldErrors(Object.fromEntries((err.fieldErrors ?? []).map(f => [f.field, f.message])))
+      }
     } finally {
       setSaving(false)
     }
@@ -223,7 +259,7 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
           <AccountSelector
             accounts={accounts}
             value={form.accountId}
-            onChange={(id) => set('accountId', id)}
+            onChange={(id) => { set('accountId', id); if (!isAmending) onAccountChange?.(id) }}
             onAdd={onAddAccount}
           />
           {isAmending && (
@@ -234,6 +270,8 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
           )}
         </div>
       </div>
+
+      {!isAmending && <GateStrip gate={gate} onGoSession={onGoSession} />}
 
       {!isAmending && (
         importing ? (
@@ -467,10 +505,20 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
         </Field>
       )}
 
-      <button type="submit" disabled={saving}
-        className="w-full py-3 bg-violet hover:brightness-110 disabled:opacity-50 text-white font-semibold rounded-xl shadow-[0_10px_30px_-12px_rgb(90_84_232/0.85)] transition-colors">
-        {saving ? 'Saving…' : isAmending ? 'Record Amendment' : 'Save Pre-Trade Entry'}
-      </button>
+      {refusal ? (
+        <RefusalPanel
+          refusal={refusal}
+          saving={saving}
+          onBack={() => setRefusal(null)}
+          onLogAsBreak={() => submit({ acknowledgeRuleBreak: true })}
+          onGoSession={onGoSession}
+        />
+      ) : (
+        <button type="submit" disabled={saving}
+          className="w-full py-3 bg-violet hover:brightness-110 disabled:opacity-50 text-white font-semibold rounded-xl shadow-[0_10px_30px_-12px_rgb(90_84_232/0.85)] transition-colors">
+          {saving ? 'Saving…' : isAmending ? 'Record Amendment' : 'Save Pre-Trade Entry'}
+        </button>
+      )}
 
       {!isAmending && (
         <p className="text-xs text-muted text-center -mt-3">
@@ -478,6 +526,121 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
         </p>
       )}
     </form>
+  )
+}
+
+// Where today stands for the selected account, in one line — plus the
+// trader's own no-trade condition while it still applies. This is the moment
+// the plan was written for.
+function GateStrip({ gate, onGoSession }) {
+  if (!gate) return null
+  const { session, gateActive } = gate
+  const link = (
+    <button type="button" onClick={onGoSession}
+      className="shrink-0 inline-flex items-center gap-1 font-semibold underline-offset-2 hover:underline">
+      {session ? 'Open plan' : 'Write the plan'} <ArrowRight size={13} strokeWidth={2.25} />
+    </button>
+  )
+
+  if (!session && gate.blockedElsewhere) {
+    return (
+      <div className="rounded-xl border border-loss/40 bg-loss-bg/70 px-4 py-2.5 text-sm text-loss/90 flex items-center gap-2">
+        <OctagonX size={15} strokeWidth={2.25} />No-trade day — recorded on {gate.blockedElsewhere}. That holds for every account.
+      </div>
+    )
+  }
+  if (!session && !gateActive) {
+    return (
+      <div className="rounded-xl border border-line bg-surface-2/60 px-4 py-2.5 text-sm text-muted flex items-center justify-between gap-3">
+        <span>No session plan yet. Writing one before the open turns on the 2-trade limit.</span>
+        <span className="text-violet-soft">{link}</span>
+      </div>
+    )
+  }
+  if (!session) {
+    return (
+      <div className="rounded-xl border border-loss/40 bg-loss-bg/70 px-4 py-2.5 text-sm text-loss/90 flex items-center justify-between gap-3">
+        <span className="flex items-center gap-2"><OctagonX size={15} strokeWidth={2.25} />No plan for today on this account. A trade will be refused.</span>
+        {link}
+      </div>
+    )
+  }
+  if (session.status === 'blocked') {
+    return (
+      <div className="rounded-xl border border-loss/40 bg-loss-bg/70 px-4 py-2.5 text-sm text-loss/90 flex items-center gap-2">
+        <OctagonX size={15} strokeWidth={2.25} />No-trade day. {session.blockedReasons[0]}
+      </div>
+    )
+  }
+  if (session.status === 'closed') {
+    return (
+      <div className="rounded-xl border border-warn/30 bg-warn-bg/60 px-4 py-2.5 text-sm text-warn/90">
+        Today's session is closed. No more trades today.
+      </div>
+    )
+  }
+  if (!session.canTrade) {
+    return (
+      <div className="rounded-xl border border-loss/40 bg-loss-bg/70 px-4 py-2.5 text-sm text-loss/90 flex items-center gap-2">
+        <OctagonX size={15} strokeWidth={2.25} />
+        Limit reached — {session.tradesLogged} of {session.maxTrades} trades used. The day is done.
+      </div>
+    )
+  }
+  return (
+    <div className="rounded-xl border border-violet/30 bg-violet/10 px-4 py-3 text-sm space-y-1.5">
+      <div className="flex items-center justify-between gap-3 text-violet-soft">
+        <span className="flex items-center gap-2 font-medium">
+          <Lock size={14} strokeWidth={2.25} />
+          Plan locked · <span className="tnum">{session.tradesRemaining} of {session.maxTrades}</span> trade{session.maxTrades === 1 ? '' : 's'} left today
+        </span>
+        {link}
+      </div>
+      <p className="text-faint"><span className="text-loss/90 font-medium">No trade if:</span> {session.noTradeIf}</p>
+    </div>
+  )
+}
+
+// The refusal. It shows the rule broken and the trader's own words from before
+// the open, and offers exactly two ways forward: do not log it, or log it as
+// the rule break it was. There is no third button that makes the rule go away.
+function RefusalPanel({ refusal, saving, onBack, onLogAsBreak, onGoSession }) {
+  const { violations, session } = refusal
+  return (
+    <div className="rounded-2xl border border-loss/50 bg-loss-bg/80 p-5 space-y-4">
+      <p className="text-base font-semibold text-loss flex items-center gap-2">
+        <OctagonX size={18} strokeWidth={2.25} /> Not logged — this breaks today's plan.
+      </p>
+      <ul className="text-sm text-loss/90 space-y-1 list-disc pl-5">
+        {violations.map(v => <li key={v.code}>{v.message}</li>)}
+      </ul>
+      {session?.noTradeIf && (
+        <blockquote className="border-l-2 border-loss/60 pl-3 text-sm text-bright">
+          <span className="block text-xs text-muted mb-0.5">Your rule, written before the open:</span>
+          {session.noTradeIf}
+        </blockquote>
+      )}
+      {!session && (
+        <button type="button" onClick={onGoSession}
+          className="text-sm text-violet-soft hover:text-bright inline-flex items-center gap-1 transition-colors">
+          Write today's plan first <ArrowRight size={13} strokeWidth={2.25} />
+        </button>
+      )}
+      <div className="grid sm:grid-cols-2 gap-2.5 pt-1">
+        <button type="button" onClick={onBack}
+          className="py-2.5 rounded-xl bg-surface-2 border border-line text-bright font-semibold hover:bg-surface-3 transition-colors">
+          Don't take it
+        </button>
+        <button type="button" disabled={saving} onClick={onLogAsBreak}
+          className="py-2.5 rounded-xl border border-loss/50 text-loss/90 text-sm hover:bg-loss/15 disabled:opacity-50 transition-colors">
+          {saving ? 'Logging…' : 'Already taken — log it as a rule break'}
+        </button>
+      </div>
+      <p className="text-xs text-muted">
+        Logging it as a rule break keeps the trade in your journal with the broken rule marked on it,
+        permanently. That record is the point — a trade left out of the journal teaches nothing.
+      </p>
+    </div>
   )
 }
 

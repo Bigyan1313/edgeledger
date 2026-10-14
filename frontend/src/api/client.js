@@ -47,6 +47,11 @@ export async function request(path, options = {}) {
     err.fieldErrors = body.fieldErrors ?? []
     // A 409 from PUT names the locked Stage A fields the request tried to touch.
     err.lockedFields = body.lockedFields ?? []
+    // A 409 from the session gate names the rules a trade would break, and
+    // carries the plan they were written in.
+    err.code = body.code ?? null
+    err.violations = body.violations ?? []
+    err.session = body.session ?? null
     throw err
   }
 

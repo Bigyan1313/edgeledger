@@ -12,12 +12,15 @@ export async function sessionGateFor({ userId, accountId, entryTimeUtc, captureT
   const timezone = resolveTimezone(captureTimezone, profile?.timezone)
   const sessionDate = localDate(new Date(entryTimeUtc), timezone)
 
-  const [session, anyEarlier] = await Promise.all([
+  const [session, anyEarlier, blockedDay] = await Promise.all([
     prisma.tradingSession.findFirst({ where: { userId, accountId: accountId ?? null, sessionDate } }),
     prisma.tradingSession.findFirst({ where: { userId, sessionDate: { lte: sessionDate } }, select: { id: true } }),
+    prisma.tradingSession.findFirst({ where: { userId, sessionDate, status: 'blocked' }, select: { id: true } }),
   ])
 
-  const violations = evaluateTrade({ gateActive: Boolean(anyEarlier), session, entryTimeUtc })
+  const violations = evaluateTrade({
+    gateActive: Boolean(anyEarlier), session, entryTimeUtc, blockedElsewhere: Boolean(blockedDay),
+  })
   return { session, sessionDate, violations }
 }
 

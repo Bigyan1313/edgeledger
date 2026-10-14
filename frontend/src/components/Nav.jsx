@@ -1,7 +1,9 @@
-import { LayoutDashboard, PlusCircle, List, Calculator, User, LogOut } from 'lucide-react'
+import { LayoutDashboard, ClipboardCheck, PlusCircle, List, Calculator, User, LogOut } from 'lucide-react'
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard',   icon: LayoutDashboard },
+  // Before Log Trade, because that is the order they are used in.
+  { id: 'session',   label: 'Session',     icon: ClipboardCheck },
   { id: 'log',       label: 'Log Trade',   icon: PlusCircle },
   { id: 'history',   label: 'History',     icon: List },
   { id: 'calc',      label: 'Calculators', icon: Calculator },

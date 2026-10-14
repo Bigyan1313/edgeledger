@@ -111,6 +111,7 @@ export default function TradeTable({ trades, onDeleted, onClose, onAmend, onRevi
                   {isOpen
                     ? <span className="text-xs px-2 py-0.5 rounded-full bg-violet/20 text-violet-soft border border-violet/30">open</span>
                     : <span className="text-xs text-gray-500">closed</span>}
+                  {trade.ruleViolations?.length > 0 && <RuleBreakPill codes={trade.ruleViolations} />}
                   {trade.wasAmended && (
                     <button onClick={() => onShowAmendments(trade)}
                       className="ml-1 text-xs px-2 py-0.5 rounded-full bg-warn-bg text-warn border border-warn/30 hover:bg-warn/20 transition-colors"
@@ -201,6 +202,27 @@ export default function TradeTable({ trades, onDeleted, onClose, onAmend, onRevi
 // Rendered as a count rather than a list of pills: v2 added enough columns that
 // a wrapping pill list pushed the row actions off the edge of the table, and the
 // detail belongs in the tooltip and the export either way.
+// Mirrors the server's VIOLATIONS. Kept short: the pill is the signal, the
+// tooltip is the detail.
+const RULE_BREAK_LABELS = {
+  no_session_plan: 'No session plan that day',
+  trading_while_blocked: 'Traded on a no-trade day',
+  after_session_closed: 'Traded after closing the session',
+  over_trade_cap: "Over the day's trade limit",
+  before_plan: 'Entered before the plan was written',
+}
+
+// Logged against the session plan. Red rather than amber: a data-quality flag
+// is about the record, a rule break is about the decision.
+function RuleBreakPill({ codes }) {
+  return (
+    <span title={codes.map(c => RULE_BREAK_LABELS[c] ?? c).join('\n')}
+      className="ml-1 text-xs px-2 py-0.5 rounded-full bg-loss-bg text-loss border border-loss/40 cursor-help">
+      rule break
+    </span>
+  )
+}
+
 function FlagPills({ flags }) {
   if (!flags.length) return <span className="text-gray-700 text-xs">—</span>
   const detail = flags.map(f => DATA_QUALITY_FLAG_LABELS[f] ?? f).join('\n')

@@ -217,9 +217,13 @@ export function validateClose(input) {
 // `gateActive` is false until the trader writes their first plan: the rules
 // start when they are adopted, so a journal full of trades from before this
 // existed is not retroactively marked as rule-breaking.
-export function evaluateTrade({ gateActive, session, entryTimeUtc }) {
+//
+// `blockedElsewhere` matters for an account with no plan of its own: if the
+// trader was ruled out on another account today, the honest reason this trade
+// is refused is that it is a no-trade day — not merely that a plan is missing.
+export function evaluateTrade({ gateActive, session, entryTimeUtc, blockedElsewhere = false }) {
   if (!gateActive) return []
-  if (!session) return ['no_session_plan']
+  if (!session) return blockedElsewhere ? ['trading_while_blocked'] : ['no_session_plan']
   if (session.status === 'blocked') return ['trading_while_blocked']
   if (session.status === 'closed') return ['after_session_closed']
 

@@ -159,6 +159,13 @@ describe('the gate', () => {
     assert.deepEqual(evaluateTrade({ gateActive: true, session: null, ...after }), ['no_session_plan'])
   })
 
+  test('an unplanned account on a day blocked elsewhere is refused as a no-trade day', () => {
+    assert.deepEqual(
+      evaluateTrade({ gateActive: true, session: null, blockedElsewhere: true, ...after }),
+      ['trading_while_blocked'],
+    )
+  })
+
   test('a blocked day refuses every trade', () => {
     assert.deepEqual(
       evaluateTrade({ gateActive: true, session: open({ status: 'blocked' }), ...after }),

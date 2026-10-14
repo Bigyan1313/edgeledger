@@ -14,7 +14,7 @@ const COMMON_ZONES = [
 
 const EMPTY = {
   displayName: '', timezone: '', baseCurrency: '',
-  defaultBrokerPlatform: '', defaultBrokerAccountId: '', defaultRiskPercent: '',
+  defaultBrokerPlatform: '', defaultBrokerAccountId: '', defaultRiskPercent: '', minSleepHours: '',
 }
 
 export default function Profile({ onSaved }) {
@@ -39,6 +39,7 @@ export default function Profile({ onSaved }) {
           defaultBrokerPlatform: p.defaultBrokerPlatform ?? '',
           defaultBrokerAccountId: p.defaultBrokerAccountId ?? '',
           defaultRiskPercent: p.defaultRiskPercent ?? '',
+          minSleepHours: p.minSleepHours ?? '',
         })
       })
       .catch(err => !cancelled && setError(err.message))
@@ -62,6 +63,7 @@ export default function Profile({ onSaved }) {
       const updated = await profileApi.save({
         ...form,
         defaultRiskPercent: form.defaultRiskPercent === '' ? null : Number(form.defaultRiskPercent),
+        minSleepHours: form.minSleepHours === '' ? null : Number(form.minSleepHours),
       })
       setSaved(true)
       onSaved?.(updated)
@@ -141,6 +143,21 @@ export default function Profile({ onSaved }) {
             <input type="number" step="any" min="0" max="100" value={form.defaultRiskPercent}
               onChange={e => set('defaultRiskPercent', e.target.value)}
               placeholder="e.g. 1" className={inputCls(fieldErrors.defaultRiskPercent)} />
+          </Field>
+        </div>
+      </fieldset>
+
+      <fieldset className="space-y-4">
+        <legend className="text-sm font-medium text-gray-300 mb-1">Session readiness</legend>
+        <p className="text-xs text-muted -mt-1 mb-2">
+          Below this many hours of sleep, the session plan records the day as a no-trade day.
+          Unset uses 6. Changing it only affects days you have not planned yet.
+        </p>
+        <div className="grid sm:grid-cols-3 gap-4">
+          <Field label="Minimum sleep (hours)" error={fieldErrors.minSleepHours}>
+            <input type="number" step="0.5" min="4" max="10" value={form.minSleepHours}
+              onChange={e => set('minSleepHours', e.target.value)}
+              placeholder="6" className={inputCls(fieldErrors.minSleepHours)} />
           </Field>
         </div>
       </fieldset>

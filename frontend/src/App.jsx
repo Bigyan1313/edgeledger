@@ -12,6 +12,7 @@ import AmendmentHistory from './components/AmendmentHistory.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import Calculators from './components/Calculators.jsx'
 import Profile from './components/Profile.jsx'
+import SessionPlan from './components/SessionPlan.jsx'
 import AuthScreen from './components/AuthScreen.jsx'
 import WakingScreen from './components/WakingScreen.jsx'
 import { downloadCsv, selectExportRows } from './utils/csv.js'
@@ -36,6 +37,10 @@ export default function App() {
   // Read-only view of a trade's audit trail. Not part of clearWork() — it is a
   // lookup, not an edit in progress.
   const [amendmentsTrade, setAmendmentsTrade] = useState(null)
+
+  // The account being worked on, shared by the Session and Log Trade tabs so a
+  // trade logged "under this plan" starts on the plan's account.
+  const [activeAccountId, setActiveAccountId] = useState(null)
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -119,6 +124,11 @@ export default function App() {
   // Clicking any nav tab abandons whatever was in progress.
   const handleNavChange = (newTab) => {
     clearWork()
+    // Opening the session plan picks a working account if none is chosen yet,
+    // so the Log Trade tab that follows is on the same one.
+    if (newTab === 'session' && activeAccountId == null && accounts.length) {
+      setActiveAccountId(accounts[0].id)
+    }
     setTab(newTab)
   }
 
@@ -166,6 +176,9 @@ export default function App() {
                   onCreated={handleCreated}
                   onAmended={handleAmended}
                   onCancelAmend={() => { clearWork(); setTab('history') }}
+                  onGoSession={() => { clearWork(); setTab('session') }}
+                  activeAccountId={activeAccountId}
+                  onAccountChange={setActiveAccountId}
                   profile={profile}
                 />
               )
@@ -214,6 +227,16 @@ export default function App() {
                   onShowAmendments={setAmendmentsTrade}
                 />
               </div>
+            )}
+
+            {tab === 'session' && (
+              <SessionPlan
+                accounts={accounts}
+                onAddAccount={handleAddAccount}
+                activeAccountId={activeAccountId}
+                onAccountChange={setActiveAccountId}
+                onGoLog={(accountId) => { setActiveAccountId(accountId); setTab('log') }}
+              />
             )}
 
             {tab === 'calc' && <Calculators defaultRiskPercent={profile?.defaultRiskPercent} />}

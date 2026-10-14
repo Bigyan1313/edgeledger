@@ -125,6 +125,23 @@ test('data quality flags survive as a parseable list', () => {
   assert.equal(cell(csv, 'data_quality_flags'), 'legacy_unlinked|missing_stop_loss|invalid_lot_size')
 })
 
+test('rule violations export as their own list, apart from data-quality flags', () => {
+  const csv = tradesToCsv([v2Trade({
+    sessionId: 42,
+    ruleViolations: ['over_trade_cap', 'before_plan'],
+    dataQualityFlags: [],
+  })])
+  assert.equal(cell(csv, 'rule_violations'), 'over_trade_cap|before_plan')
+  assert.equal(cell(csv, 'session_id'), '42')
+  assert.equal(cell(csv, 'data_quality_flags'), '')
+})
+
+test('a trade from before session plans exports empty session columns', () => {
+  const csv = tradesToCsv([v2Trade({ sessionId: null, ruleViolations: [] })])
+  assert.equal(cell(csv, 'session_id'), '')
+  assert.equal(cell(csv, 'rule_violations'), '')
+})
+
 test('a row with no flags exports an empty cell, not an empty-looking one', () => {
   const csv = tradesToCsv([v2Trade({ dataQualityFlags: [] })])
   assert.equal(cell(csv, 'data_quality_flags'), '')

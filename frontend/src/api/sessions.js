@@ -1,0 +1,25 @@
+import { request } from './client.js'
+
+// The browser's own zone. The server prefers the profile's pinned zone when
+// there is one; this is the fallback for a trader who has not set it.
+export const browserTimezone = () => {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone } catch { return 'UTC' }
+}
+
+export const sessionsApi = {
+  today: (accountId) => {
+    const params = new URLSearchParams({ timezone: browserTimezone() })
+    if (accountId != null) params.set('accountId', String(accountId))
+    return request(`/sessions/today?${params}`)
+  },
+  list: () => request('/sessions'),
+  // Readiness plus, if readiness passes, the plan. Locked once saved.
+  create: (data) => request('/sessions', { method: 'POST', body: JSON.stringify({ timezone: browserTimezone(), ...data }) }),
+  close: (id, data) => request(`/sessions/${id}/close`, { method: 'POST', body: JSON.stringify(data) }),
+}
+
+// Mirrors the server's ceiling. The server and the database both enforce it;
+// this only keeps the form from offering a choice that will be refused.
+export const MAX_TRADES_CEILING = 2
+export const MIN_PLAN_TEXT = 10
+export const MAX_SCENARIOS = 5

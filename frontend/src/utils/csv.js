@@ -57,6 +57,13 @@ const COLUMNS = [
 
   // Task 8 — what is wrong with this row, if anything.
   ['data_quality_flags', t => t.dataQualityFlags],
+
+  // The session plan the trade was logged under, and which of its rules the
+  // trade broke. Kept apart from data_quality_flags: a flag is about the
+  // record, a violation is about the decision, and the pipeline will want to
+  // split on them separately ("do the rule-break trades lose more?").
+  ['session_id', t => t.sessionId],
+  ['rule_violations', t => t.ruleViolations],
   ['legacy_setup', t => t.legacySetup],
 
   ['notes', t => t.notes],

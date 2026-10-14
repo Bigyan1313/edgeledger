@@ -108,6 +108,9 @@ describe('importing a Tradovate export', () => {
     const { status, body } = await api('/imports/tradovate/apply', { csv: CSV, timezone: 'America/Chicago', tradeIds: [longId] })
     assert.equal(status, 200)
     assert.deepEqual(body.closed, [longId])
+    // The response shows the state after closing, not before.
+    assert.equal(body.rows.find(r => r.trade?.id === longId).status, 'already_closed')
+    assert.equal(body.summary.willClose, 1)
     const long = await prisma.trade.findUnique({ where: { id: longId } })
     assert.equal(long.entryStage, 'complete')
     assert.equal(long.pnl, 215)
@@ -120,7 +123,7 @@ describe('importing a Tradovate export', () => {
   test('the same file again closes nothing twice', async () => {
     const { body } = await api('/imports/tradovate/apply', { csv: CSV, timezone: 'America/Chicago', tradeIds: [longId, shortId] })
     assert.deepEqual(body.closed, [shortId])
-    assert.equal(body.summary.alreadyClosed, 1)
+    assert.equal(body.summary.alreadyClosed, 2)
     const again = await api('/imports/tradovate/apply', { csv: CSV, timezone: 'America/Chicago', tradeIds: [longId, shortId] })
     assert.deepEqual(again.body.closed, [])
     assert.equal(again.body.summary.alreadyClosed, 2)

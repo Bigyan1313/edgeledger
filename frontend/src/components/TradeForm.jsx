@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, ArrowRight, ImageUp, Lock, OctagonX, X } from 'lucide-react'
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, ArrowRight, ImageUp, Lock, OctagonX, ShieldAlert, X } from 'lucide-react'
 import { tradesApi } from '../api/trades.js'
 import { sessionsApi } from '../api/sessions.js'
+import { accountsApi } from '../api/accounts.js'
+import { money } from '../utils/money.js'
 import AccountSelector from './AccountSelector.jsx'
 import { fileToCompressedDataUrl } from '../utils/image.js'
 import { isoToZonedInput, possibleInstantsForLocal, zonedInputToIso } from '../utils/datetime.js'
@@ -101,7 +103,7 @@ function plannedRR(form) {
 const num = (v) => (v === '' || v === null ? null : parseFloat(v))
 const bool = (v) => (v === '' ? null : v === 'true')
 
-export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onCreated, onAmended, onCancelAmend, onGoSession, activeAccountId = null, onAccountChange, profile = null }) {
+export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onCreated, onAmended, onCancelAmend, onGoSession, onGoProfile, activeAccountId = null, onAccountChange, profile = null }) {
   const isAmending = Boolean(amendTrade)
   const [timezone] = useState(() => amendTrade?.captureTimezone || profile?.timezone || detectTimezone())
   const [form, setForm] = useState(() => amendTrade ? tradeToForm(amendTrade, timezone) : emptyFormFor(profile, activeAccountId))
@@ -127,6 +129,21 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
       .catch(() => { if (!cancelled) setGate(null) })
     return () => { cancelled = true }
   }, [isAmending, form.accountId, gateVersion])
+
+  // How far the selected account is from being lost, and what the trade being
+  // typed would leave. Re-asked a moment after entry, stop, size or symbol
+  // change, so the number moves with the form rather than on every keystroke.
+  const [standing, setStanding] = useState(null)
+  useEffect(() => {
+    if (isAmending || form.accountId == null) return
+    let cancelled = false
+    const timer = setTimeout(() => {
+      accountsApi.standing(form.accountId, { pair: form.pair, entryPrice: form.entryPrice, stopLoss: form.stopLoss, lotSize: form.lotSize })
+        .then(st => { if (!cancelled) setStanding(st) })
+        .catch(() => { if (!cancelled) setStanding(null) })
+    }, 350)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [isAmending, form.accountId, form.pair, form.entryPrice, form.stopLoss, form.lotSize, gateVersion])
 
   const entryChoices = useMemo(() => {
     if (!form.entryTimeUtc) return []
@@ -272,6 +289,9 @@ export default function TradeForm({ amendTrade, accounts = [], onAddAccount, onC
       </div>
 
       {!isAmending && <GateStrip gate={gate} onGoSession={onGoSession} />}
+      {!isAmending && form.accountId != null && standing?.accountId === form.accountId && (
+        <StandingStrip standing={standing} pricedInput={Boolean(form.pair && form.entryPrice && form.stopLoss && form.lotSize)} onGoProfile={onGoProfile} />
+      )}
 
       {!isAmending && (
         importing ? (
@@ -537,7 +557,7 @@ function GateStrip({ gate, onGoSession }) {
   const { session, gateActive } = gate
   const link = (
     <button type="button" onClick={onGoSession}
-      className="shrink-0 inline-flex items-center gap-1 font-semibold underline-offset-2 hover:underline">
+      className="shrink-0 whitespace-nowrap inline-flex items-center gap-1 font-semibold underline-offset-2 hover:underline">
       {session ? 'Open plan' : 'Write the plan'} <ArrowRight size={13} strokeWidth={2.25} />
     </button>
   )
@@ -597,6 +617,54 @@ function GateStrip({ gate, onGoSession }) {
         {link}
       </div>
       <p className="text-faint"><span className="text-loss/90 font-medium">No trade if:</span> {session.noTradeIf}</p>
+    </div>
+  )
+}
+
+// Distance to losing the account, and what the trade being typed would leave.
+// It informs; the session gate is what refuses.
+function StandingStrip({ standing, pricedInput, onGoProfile }) {
+  const setRules = (
+    <button type="button" onClick={onGoProfile} className="shrink-0 font-semibold text-violet-soft underline-offset-2 hover:underline">
+      Set loss rules
+    </button>
+  )
+  if (!standing.configured || standing.status === 'no_rules') {
+    return (
+      <div className="rounded-xl border border-line bg-surface-2/60 px-4 py-2.5 text-sm text-muted flex items-center justify-between gap-3">
+        <span>{standing.configured ? `Balance ${money(standing.balance)}. ` : ''}Add this account's loss rules to see how far it is from being lost.</span>
+        {setRules}
+      </div>
+    )
+  }
+
+  const limitName = standing.binding === 'daily' ? 'the daily loss limit' : 'the drawdown floor'
+  const danger = standing.status === 'breached' || standing.status === 'danger'
+  return (
+    <div className={`rounded-xl border px-4 py-3 text-sm space-y-1 ${danger ? 'border-loss/50 bg-loss-bg/80' : 'border-line bg-surface-2/60'}`}>
+      <p className={`flex items-center gap-2 font-medium tnum ${danger ? 'text-loss' : 'text-bright'}`}>
+        <ShieldAlert size={14} strokeWidth={2.25} />
+        {standing.status === 'breached'
+          ? <>Past {limitName} by {money(-standing.room)}. By the firm's rules this account may already be lost.</>
+          : <>{money(standing.room)} to {limitName}</>}
+      </p>
+      {standing.status !== 'breached' && (
+        <p className="text-faint tnum">
+          {standing.binding === 'daily' && standing.distanceToFloor != null && <>{money(standing.distanceToFloor)} above the drawdown floor. </>}
+          {standing.binding === 'drawdown' && standing.dailyRemaining != null && <>{money(standing.dailyRemaining)} left today. </>}
+          {standing.openRisk > 0 && <>Open stops risk {money(standing.openRisk)}. </>}
+        </p>
+      )}
+      {standing.plannedRisk != null && (
+        <p className={`tnum ${standing.roomAfterPlanned <= 0 ? 'text-loss font-semibold' : 'text-faint'}`}>
+          {standing.roomAfterPlanned <= 0
+            ? <>This trade risks {money(standing.plannedRisk)} — more than is left. If it stops out, it could take the account.</>
+            : <>This trade risks {money(standing.plannedRisk)} → {money(standing.roomAfterPlanned)} left if every stop hits.</>}
+        </p>
+      )}
+      {standing.plannedRisk == null && pricedInput && (
+        <p className="text-muted">Risk can't be priced for this symbol, so it isn't counted here.</p>
+      )}
     </div>
   )
 }

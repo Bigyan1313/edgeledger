@@ -129,7 +129,11 @@ router.post('/tradovate/apply', handle(async (req, res) => {
     return ids
   })
 
-  res.json({ closed, ...present(result.analysis) })
+  // Re-read after closing: the response shows the file against the journal
+  // as it is now, so the trades just closed come back as already closed
+  // rather than still offered for closing.
+  const after = await analyse(req.userId, req.body)
+  res.json({ closed, ...present(after.analysis) })
 }))
 
 export default router

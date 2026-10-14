@@ -62,8 +62,9 @@ export default function EdgeChat() {
   if (!open) {
     return (
       <button type="button" onClick={() => setOpen(true)} aria-label="Ask Edge"
-        className="fixed right-4 sm:right-6 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] sm:bottom-6 z-30 h-12 pl-4 pr-5 rounded-full bg-violet text-white font-semibold shadow-[0_12px_32px_-10px_rgb(90_84_232/0.9)] hover:brightness-110 transition flex items-center gap-2">
-        <Sparkles size={17} strokeWidth={2.25} /> Ask Edge
+        className="fixed right-4 sm:right-6 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] sm:bottom-6 z-30 h-12 w-12 sm:w-auto sm:pl-4 sm:pr-5 rounded-full bg-violet text-white font-semibold shadow-[0_12px_32px_-10px_rgb(90_84_232/0.9)] hover:brightness-110 transition flex items-center justify-center gap-2">
+        {/* Icon-only on a phone, where a wide pill would sit over form fields. */}
+        <Sparkles size={17} strokeWidth={2.25} /><span className="hidden sm:inline">Ask Edge</span>
       </button>
     )
   }

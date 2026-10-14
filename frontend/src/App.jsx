@@ -14,6 +14,10 @@ import Calculators from './components/Calculators.jsx'
 import Profile from './components/Profile.jsx'
 import SessionPlan from './components/SessionPlan.jsx'
 import PriceActionReview from './components/PriceActionReview.jsx'
+import EdgeChat from './components/EdgeChat.jsx'
+import AccountRules from './components/AccountRules.jsx'
+import TradovateImport from './components/TradovateImport.jsx'
+import { FileUp } from 'lucide-react'
 import AuthScreen from './components/AuthScreen.jsx'
 import WakingScreen from './components/WakingScreen.jsx'
 import { selectExportRows } from './utils/csv.js'
@@ -39,6 +43,8 @@ export default function App() {
   // Read-only view of a trade's audit trail. Not part of clearWork() — it is a
   // lookup, not an edit in progress.
   const [amendmentsTrade, setAmendmentsTrade] = useState(null)
+
+  const [importing, setImporting] = useState(false)
 
   // The account being worked on, shared by the Session and Log Trade tabs so a
   // trade logged "under this plan" starts on the plan's account.
@@ -165,7 +171,9 @@ export default function App() {
       {/* The v2 trade table carries more columns than v1 did — broker linkage,
           both setup axes, stage, flags — so History gets a wider column than the
           rest of the app rather than scrolling its actions off the edge. */}
-      <main className={`${tab === 'history' ? 'max-w-7xl' : 'max-w-5xl'} mx-auto px-6 py-8`}>
+      {/* On a phone the bottom bar and the Ask Edge button sit over the end of
+          the page, so it gets room to scroll clear of both. */}
+      <main className={`${tab === 'history' ? 'max-w-7xl' : 'max-w-5xl'} mx-auto px-4 sm:px-6 pt-6 sm:pt-8 pb-40 sm:pb-24`}>
         {error && (
           <div className="rounded-xl border border-loss/40 bg-loss-bg/80 px-4 py-3 text-loss/90 text-sm">
             {error}
@@ -194,6 +202,7 @@ export default function App() {
                   onAmended={handleAmended}
                   onCancelAmend={() => { clearWork(); setTab('history') }}
                   onGoSession={() => { clearWork(); setTab('session') }}
+                  onGoProfile={() => { clearWork(); setTab('profile') }}
                   activeAccountId={activeAccountId}
                   onAccountChange={setActiveAccountId}
                   profile={profile}
@@ -205,7 +214,11 @@ export default function App() {
               <div>
                 <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
                   <h2 className="text-xl font-semibold text-bright tracking-tight">Trade History</h2>
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <button type="button" onClick={() => setImporting(true)}
+                      className="text-sm px-3 py-2 rounded-xl border border-violet/40 bg-violet/15 text-violet-soft hover:bg-violet/25 transition-colors inline-flex items-center gap-1.5">
+                      <FileUp size={14} strokeWidth={2} />Import Tradovate
+                    </button>
                     <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-400">
                       <input
                         type="checkbox"
@@ -254,10 +267,25 @@ export default function App() {
 
             {tab === 'calc' && <Calculators defaultRiskPercent={profile?.defaultRiskPercent} />}
 
-            {tab === 'profile' && <Profile onSaved={setProfile} />}
+            {tab === 'profile' && (
+              <>
+                <Profile onSaved={setProfile} />
+                <AccountRules accounts={accounts} onUpdated={(a) => setAccounts(prev => prev.map(x => (x.id === a.id ? a : x)))} />
+              </>
+            )}
           </>
         )}
       </main>
+
+      <EdgeChat />
+
+      {importing && (
+        <TradovateImport
+          accounts={accounts}
+          onClose={() => setImporting(false)}
+          onApplied={() => tradesApi.list({ includeLegacy }).then(setTrades).catch(() => {})}
+        />
+      )}
 
       {amendmentsTrade && (
         <AmendmentHistory trade={amendmentsTrade} onClose={() => setAmendmentsTrade(null)} />
